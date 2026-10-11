@@ -3,7 +3,8 @@
 Hestia is a personal "everything app" for the home lab. This repository holds its backend:
 one ASP.NET Core host, `Hestia.Api`, with all Hestia modules inside it (a modular monolith).
 
-- The host will sign users in (T03) and proxy the finance service, [PersonalFinanceInsightsBackend](https://github.com/guibilar/PersonalFinanceInsightsBackend) (T02).
+- The host is the gateway in front of the finance service, [PersonalFinanceInsightsBackend](https://github.com/guibilar/PersonalFinanceInsightsBackend).
+  It proxies the finance paths to it (see [Finance proxy](#finance-proxy)). It will also sign users in (T03).
 - Each new module (Documents, Tasks, People, Journal, Home, and others) lives in the host as a module.
 - Clients reach the host only through Tailscale HTTPS and the frontend's nginx. Nothing is open to the internet.
 
@@ -13,7 +14,7 @@ one ASP.NET Core host, `Hestia.Api`, with all Hestia modules inside it (a modula
 
 ```
 src/
-  Hestia.Api/                       host: composition root, health checks
+  Hestia.Api/                       host: composition root, health checks, finance proxy (Gateway/)
   Hestia.Platform/                  shared kernel: base entity, paging, exceptions, error handler,
                                     health check, reverse proxy setup, IModule, module database setup
   Hestia.Contracts/                 contracts shared with other processes (finance events, Today cards)
@@ -73,11 +74,54 @@ Endpoints now:
 | Endpoint | Description |
 | --- | --- |
 | `GET /health/live` | The process answers. |
-| `GET /health/ready` | The host can serve requests (each module can connect to its database). |
+| `GET /health/ready` | The host can serve requests: each module can connect to its database, and finance answers its `/health/ready`. |
 | `GET /api/sample/items?page=1&pageSize=20` | Sample module: a page of items. |
 | `POST /api/sample/items` | Sample module: make an item, `{ "name": "Kettle" }`. |
+| `/api/Accounts`, `/api/Auth`, `/api/Transaction`, and the other finance paths | Proxied to the finance backend, unchanged. |
+
+In Development, the host sends the finance paths to `http://localhost:5096` (the finance backend's `dotnet run` address).
+Without a finance backend, `/health/ready` answers 503 and the finance paths answer 502. The modules still work.
 
 There is no sign-in yet (T03). Keep the host on the internal Docker network only.
+
+## Finance proxy
+
+`Hestia.Api` sits between the frontend's nginx and the finance backend (D6). The code is in `src/Hestia.Api/Gateway/`
+and uses [YARP](https://microsoft.github.io/reverse-proxy/).
+
+```
+client ──Tailscale HTTPS──> nginx (frontend) ──/api──> hestia-api:8080 ──finance paths──> personal-finance-api:8080
+                                                            └── module paths (/api/sample, ...) stay in the host
+```
+
+The route table is in configuration, in the section `FinanceProxy` of `appsettings.json`:
+
+| Setting | Default | Description |
+| --- | --- | --- |
+| `Address` | `http://personal-finance-api:8080` | The finance backend, without a path. Docker: `FINANCE_API_URL` in `.env`. |
+| `Paths` | The nine finance controllers: `/api/Accounts`, `/api/Auth`, `/api/Budget`, `/api/Categories`, `/api/CategoryRules`, `/api/FlowRules`, `/api/Reports`, `/api/Tags`, `/api/Transaction` | Each prefix matches itself and every path below it, in any letter case. |
+| `HealthPath` | `/health/ready` | The finance endpoint that `/health/ready` of the host calls. |
+| `HealthTimeout` | `00:00:05` | How long the readiness check waits for finance. |
+| `ActivityTimeout` | `00:01:40` | How long a proxied request can stay idle before the host stops it. |
+
+When the finance backend gets a new controller, add its path to `Paths`. The host does not start with an invalid
+`FinanceProxy` section.
+
+What the proxy keeps and changes:
+
+- It keeps the method, the path, the query string, the body, the cookies, the `Authorization` header, and the `Host`
+  header from nginx. The response (status, headers, `Set-Cookie`, body) comes back unchanged. The host does not add an
+  error body to a finance response.
+- It sets `X-Forwarded-For` and `X-Forwarded-Proto` to the client address and the scheme that the host found itself.
+  The host believes these headers only from the proxies in `ReverseProxy:TrustedNetworks`, so a client cannot fake them.
+  Finance sees the same client and scheme as before, so its rate limit per address and its `Secure` session cookie still work.
+- A module endpoint takes priority over the proxy on the same path (the finance routes have endpoint order 1000).
+  Module paths never go to finance. Each module uses its own prefix, for example `/api/documents`.
+- If finance does not answer, a proxied request gets 502, and `/health/ready` answers 503.
+  `/health/live` does not check finance, so a finance outage does not restart the host.
+
+The tests use `FakeFinance` (in `tests/Hestia.Testing`): a small finance stand-in on a real local port, which records
+each request as finance would see it.
 
 ## Test
 
@@ -114,7 +158,7 @@ dotnet ef migrations add <Name> \
 
 `docker-compose.yml` starts the host (`hestia-api`) and its PostgreSQL (`hestia-db`, database `Hestia`).
 The host joins the external network `finance`, which the finance backend's compose project makes.
-Start the finance project first.
+Start the finance project first. The host reaches finance there as `http://personal-finance-api:8080`.
 
 ```bash
 cp .env.example .env          # set POSTGRES_PASSWORD
@@ -122,4 +166,8 @@ docker compose up -d --build
 curl http://localhost:5097/health/ready
 ```
 
-The frontend's nginx will reach the host as `http://hestia-api:8080` (T02).
+To send all clients through the host, set `API_UPSTREAM=http://hestia-api:8080` in the frontend's `.env`, and
+restart the frontend (`docker compose up -d`). To go back, remove the line: nginx then calls finance directly again.
+
+CI does the same with a small nginx stand-in for finance (`docker/ci/finance-stub.conf`). It checks that a finance path
+reaches finance with its query string, `Host`, cookies, and `X-Forwarded-Proto`, and that a module path stays in the host.
