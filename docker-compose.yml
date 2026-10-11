@@ -28,6 +28,14 @@ services:
       Events__RabbitMq: ${EVENTS_RABBITMQ_URL:-}
       # T04: a debug consumer logs every event. For a check, not for every day.
       Events__LogAll: ${EVENTS_LOG_ALL:-false}
+      # T03: the private key that signs the gateway token of each finance request (see "Sign-in" in the README).
+      FinanceProxy__SigningKey: "${GATEWAY_SIGNING_KEY:?Set GATEWAY_SIGNING_KEY in .env (see Sign-in in the README)}"
+      # T03: optional. An account that the host makes when it starts (or import the finance account once).
+      Identity__InitialUser__Username: "${HESTIA_USERNAME:-}"
+      Identity__InitialUser__Password: "${HESTIA_PASSWORD:-}"
+      Identity__InitialUser__ResetPassword: "${HESTIA_RESET_PASSWORD:-false}"
+      # T03: optional. A bearer token that reads but changes nothing (scripts, an assistant). Empty turns it off.
+      Identity__ReadOnlyToken: "${HESTIA_READONLY_TOKEN:-}"
     depends_on:
       hestia-db:
         condition: service_healthy

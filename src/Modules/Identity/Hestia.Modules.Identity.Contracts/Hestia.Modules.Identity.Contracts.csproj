@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Public: what other modules may use. It references only Hestia.Platform and Hestia.Contracts.
+       The signed-in user itself comes from ASP.NET Core (HttpContext.User); see Hestia.Platform.Auth.HestiaUser. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Hestia.Platform\Hestia.Platform.csproj" />
+  </ItemGroup>
+
+</Project>

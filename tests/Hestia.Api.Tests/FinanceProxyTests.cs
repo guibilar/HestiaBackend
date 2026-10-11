@@ -26,14 +26,14 @@ public class FinanceProxyTests
     private const string PublicHost = "hestia.tailnet.ts.net";
 
     [Fact]
-    public async Task Request_ReachesFinance_Unchanged()
+    public async Task Request_ReachesFinance_Unchanged_ExceptTheSignIn()
     {
         await using var finance = await FakeFinance.StartAsync();
         await using var host = Host(finance);
         var request = FromNginx(HttpMethod.Post, "/api/Transaction/import?accountId=7&note=a%20b");
         request.Content = new StringContent("{\"amount\":12.5}", Encoding.UTF8, "application/json");
         request.Headers.Add("Cookie", "finance_session=abc; theme=dark");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", "read-only-token");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", "a-token-from-the-client");
 
         var response = await Client(host).SendAsync(request);
 
@@ -43,9 +43,12 @@ public class FinanceProxyTests
         Assert.Equal("/api/Transaction/import?accountId=7&note=a%20b", received.Target);
         Assert.Equal("{\"amount\":12.5}", received.Body);
         Assert.Equal("application/json; charset=utf-8", received.Header("Content-Type"));
-        Assert.Equal("finance_session=abc; theme=dark", received.Header("Cookie"));
-        Assert.Equal("Bearer read-only-token", received.Header("Authorization"));
         Assert.Equal(PublicHost, received.Header("Host"));
+        // T03: the host's session cookie stays in the host; other cookies go on.
+        Assert.Equal("theme=dark", received.Header("Cookie"));
+        // T03: the client's Authorization header is replaced by the gateway token of the signed-in user.
+        var token = GatewayToken.Read(received);
+        Assert.Equal((TestSignIn.UserId, TestSignIn.Username, "full"), (token.Subject, token.Name, token.Scope));
     }
 
     [Theory]
@@ -55,7 +58,7 @@ public class FinanceProxyTests
     {
         await using var finance = await FakeFinance.StartAsync();
         await using var host = Host(finance);
-        var request = FromNginx(HttpMethod.Post, "/api/Auth/login", forwardedProto);
+        var request = FromNginx(HttpMethod.Get, "/api/Accounts", forwardedProto);
 
         var response = await Client(host).SendAsync(request);
 
@@ -75,7 +78,7 @@ public class FinanceProxyTests
         await using var finance = await FakeFinance.StartAsync();
         // A client that talks to the host directly, not through nginx, and claims another address and HTTPS.
         await using var host = Host(finance, clientAddress: "203.0.113.7");
-        var request = FromNginx(HttpMethod.Get, "/api/Auth/me");
+        var request = FromNginx(HttpMethod.Get, "/api/Accounts");
 
         await Client(host).SendAsync(request);
 
@@ -123,7 +126,6 @@ public class FinanceProxyTests
     [Theory]
     [InlineData("/api/Accounts")]
     [InlineData("/api/Accounts/3")]
-    [InlineData("/api/Auth/me")]
     [InlineData("/api/Budget")]
     [InlineData("/api/Categories/1")]
     [InlineData("/api/CategoryRules")]
@@ -144,6 +146,7 @@ public class FinanceProxyTests
 
     [Theory]
     [InlineData("/api/sample/items", HttpStatusCode.OK)]           // a module endpoint
+    [InlineData("/api/Auth/me", HttpStatusCode.OK)]                // sign-in is in the host now (T03)
     [InlineData("/api/no-such-module", HttpStatusCode.NotFound)]   // no module and no finance path
     [InlineData("/api/TransactionX", HttpStatusCode.NotFound)]     // a prefix matches whole path segments only
     [InlineData("/health/live", HttpStatusCode.OK)]

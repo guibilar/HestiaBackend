@@ -15,6 +15,18 @@ public class SampleItemTests
     private const string Items = "/api/sample/items";
 
     [Fact]
+    public async Task WithoutSignIn_TheEndpointsAnswer401()
+    {
+        // The other tests are signed in (HestiaApiFactory). Here the real sign-in is in charge (T03).
+        await using var factory = new HestiaApiFactory(signedIn: false);
+        var client = factory.CreateClient();
+
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync(Items)).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.PostAsJsonAsync(Items, new CreateSampleItemRequest("Kettle"))).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/sample/activity")).StatusCode);
+    }
+
+    [Fact]
     public async Task Create_ReturnsTheItem_AndTheListShowsIt()
     {
         await using var factory = new HestiaApiFactory();

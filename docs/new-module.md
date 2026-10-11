@@ -24,6 +24,12 @@ Replace `Documents` and `documents` with the name of your module.
 - The module has one registration call each: `services.AddDocumentsModule(config)` and `app.MapDocumentsModule()`.
 - The endpoints use the prefix `/api/documents`.
 - Other modules read your data only through query interfaces in your `.Contracts` project.
+- Every endpoint needs a signed-in user. You do not add anything for this. Do not use `AllowAnonymous()`.
+  The user is `HttpContext.User` (a `ClaimsPrincipal` parameter in a minimal API).
+- A read-only user (the read-only token) can call GET endpoints only. If a POST endpoint only reads (for example a
+  search with its criteria in the body), add `.ReadOnlyQuery()` (`Hestia.Platform.Auth`).
+- To read finance data, use `IFinanceClient` (`Hestia.Platform.Finance`). Do not call the host's own proxy, and do not
+  read the finance database.
 
 The architecture tests check these rules. If a test fails, change the code, not the test.
 
@@ -52,7 +58,8 @@ Make sure that the migration starts with `EnsureSchema(name: "documents")`, and 
 
 1. Copy `tests/Hestia.Modules.Sample.Tests/` to `tests/Hestia.Modules.Documents.Tests/`, and rename the project.
 2. Keep `TestDatabaseFixture.cs`. It starts the test database for the test assembly.
-3. Use `HestiaApiFactory` (in `tests/Hestia.Testing`) to run the full host with all modules.
+3. Use `HestiaApiFactory` (in `tests/Hestia.Testing`) to run the full host with all modules. It signs every request
+   in as a test user. Add one test that a request without sign-in gets 401: `new HestiaApiFactory(signedIn: false)`.
 4. Run the tests on both databases:
 
 ```bash

@@ -1,4 +1,5 @@
 using Hestia.Platform.Exceptions;
+using Hestia.Platform.Finance;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -8,7 +9,8 @@ namespace Hestia.Platform.Errors;
 
 /// <summary>
 /// Turns exceptions into RFC 9457 problem details. Platform exceptions become 400/404/409 with
-/// their message. Other exceptions are logged and returned as a generic 500.
+/// their message. A failed finance call (<see cref="FinanceRequestException"/>) is logged and becomes 502.
+/// Other exceptions are logged and returned as a generic 500.
 /// </summary>
 public class ApiExceptionHandler(IProblemDetailsService problemDetails, ILogger<ApiExceptionHandler> logger)
     : IExceptionHandler
@@ -35,10 +37,15 @@ public class ApiExceptionHandler(IProblemDetailsService problemDetails, ILogger<
         {
             NotFoundException => (StatusCodes.Status404NotFound, "Not found", exception.Message),
             ConflictException => (StatusCodes.Status409Conflict, "Conflict", exception.Message),
+            FinanceRequestException => (StatusCodes.Status502BadGateway, "Finance is not available", "The finance service did not give an answer. Try again later."),
             _ => (StatusCodes.Status500InternalServerError, "An unexpected error occurred", null)
         };
 
-        if (status == StatusCodes.Status500InternalServerError)
+        if (status == StatusCodes.Status502BadGateway)
+        {
+            logger.LogWarning(exception, "Finance call failed for {Method} {Path}", context.Request.Method, context.Request.Path);
+        }
+        else if (status == StatusCodes.Status500InternalServerError)
         {
             logger.LogError(exception, "Unhandled exception for {Method} {Path}", context.Request.Method, context.Request.Path);
         }

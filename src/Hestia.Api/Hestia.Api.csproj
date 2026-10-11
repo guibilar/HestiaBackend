@@ -21,6 +21,7 @@
 
   <!-- The modules. The host finds them at start (ModuleLoader); a reference here is all it needs. -->
   <ItemGroup Label="Modules">
+    <ProjectReference Include="..\Modules\Identity\Hestia.Modules.Identity\Hestia.Modules.Identity.csproj" />
     <ProjectReference Include="..\Modules\Sample\Hestia.Modules.Sample\Hestia.Modules.Sample.csproj" />
   </ItemGroup>
 

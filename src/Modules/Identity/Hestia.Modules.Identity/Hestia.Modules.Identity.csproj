@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Internal: sign-in (D5). Only the host references this project.
+       Other modules use Hestia.Modules.Identity.Contracts, and the normal ASP.NET Core user. -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The user store on the module's DbContext. -->
+    <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" />
+    <!-- The keys that encrypt the session cookie, in the database, so sessions survive a new container. -->
+    <PackageReference Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Hestia.Platform\Hestia.Platform.csproj" />
+    <ProjectReference Include="..\Hestia.Modules.Identity.Contracts\Hestia.Modules.Identity.Contracts.csproj" />
+  </ItemGroup>
+
+</Project>

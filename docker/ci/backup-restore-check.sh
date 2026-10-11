@@ -7,20 +7,28 @@
 set -eu
 
 api=${1:-http://localhost:5097}
+# T03: the Sample endpoints need a signed-in user (HESTIA_USERNAME and HESTIA_PASSWORD, as for the smoke test).
+cookies=$(mktemp)
+trap 'rm -f "$cookies"' EXIT
+sign_in() {
+  curl -sf -c "$cookies" -H 'Content-Type: application/json' \
+    -d "{\"username\":\"${HESTIA_USERNAME:?}\",\"password\":\"${HESTIA_PASSWORD:?}\"}" "$api/api/Auth/login" > /dev/null
+}
 
 # psql in the backup container (the connection comes from its environment). $1: database.
 sql() { docker compose exec -T backup psql --no-psqlrc --tuples-only --no-align --dbname "$1" -c "$2"; }
 items_named() { sql "$1" "SELECT count(*) FROM sample.\"Items\" WHERE \"Name\" = '$2'"; }
 add_item() {
-  curl -sf -X POST -H 'Content-Type: application/json' -d "{\"name\":\"$1\"}" "$api/api/sample/items" > /dev/null
+  curl -sf -b "$cookies" -X POST -H 'Content-Type: application/json' -d "{\"name\":\"$1\"}" "$api/api/sample/items" > /dev/null
 }
 wait_ready() {
-  for i in $(seq 1 60); do curl -sf "$api/health/ready" > /dev/null && return 0; sleep 1; done
+  for i in $(seq 1 60); do curl -sf "$api/health/ready" > /dev/null && sign_in && return 0; sleep 1; done
   echo "The host is not ready." >&2
   return 1
 }
 fail() { echo "::error::$*" >&2; exit 1; }
 
+sign_in
 echo "1. Backup"
 add_item before-backup
 docker compose exec -T backup backup.sh once
@@ -49,7 +57,7 @@ wait_ready
 [ "$(items_named Hestia after-backup)" = 0 ] || fail "restore.sh kept an item from after the dump."
 docker compose exec -T backup sh -c 'ls /backups/before-restore-*.dump' > /dev/null ||
   fail "restore.sh did not save the database first."
-curl -sf "$api/api/sample/items" | jq -e 'any(.. | objects; .name? == "before-backup")' > /dev/null ||
+curl -sf -b "$cookies" "$api/api/sample/items" | jq -e 'any(.. | objects; .name? == "before-backup")' > /dev/null ||
   fail "The host does not show the restored item."
 
 echo "4. docker/restore.sh with a file on this machine"
