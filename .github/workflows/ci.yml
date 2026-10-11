@@ -52,17 +52,41 @@ jobs:
       # On the server, the finance project makes this network.
       - name: The shared "finance" network
         run: docker network create finance
+      # On the server, the finance project runs the finance backend under this name. Here, a small nginx echo.
+      - name: A stand-in for the finance backend
+        run: >
+          docker run -d --name personal-finance-api --network finance
+          -v "$PWD/docker/ci/finance-stub.conf:/etc/nginx/conf.d/default.conf:ro" nginx:alpine
       - name: Build and start the stack (host + PostgreSQL, as deployed)
         run: docker compose up -d --build --wait
-      - name: /health/ready answers 200
+      - name: /health/ready answers 200 (the databases and finance answer)
         run: |
           for i in $(seq 1 60); do curl -sf http://localhost:5097/health/ready && exit 0; sleep 1; done
           exit 1
+      - name: Finance paths go through the host to finance, unchanged
+        run: |
+          body=$(curl -sf -H 'Host: hestia.example.ts.net' -H 'X-Forwarded-Proto: https' -H 'Cookie: finance_session=abc' \
+            'http://localhost:5097/api/Transaction?categoryId=4&startDate=2026-10-01')
+          echo "$body"
+          echo "$body" | jq -e '.stub == "finance"
+            and .path == "/api/Transaction?categoryId=4&startDate=2026-10-01"
+            and .host == "hestia.example.ts.net"
+            and .forwardedProto == "https"
+            and .cookie == "finance_session=abc"'
+      - name: Module paths stay in the host
+        run: |
+          body=$(curl -sf http://localhost:5097/api/sample/items)
+          echo "$body"
+          echo "$body" | jq -e 'has("stub") | not'
       - name: The host runs as a non-root user
         run: test "$(docker exec hestia-api id -u)" != 0
       - name: Container logs
         if: failure()
-        run: docker compose logs
+        run: |
+          docker compose logs
+          docker logs personal-finance-api
       - name: Stop the stack
         if: always()
-        run: docker compose down -v
+        run: |
+          docker compose down -v
+          docker rm -f personal-finance-api
