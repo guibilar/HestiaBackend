@@ -59,8 +59,8 @@ public sealed class RecordingConsumer<TEvent>(EventRecorder recorder) where TEve
 
 /// <summary>
 /// Adds a <see cref="RecordingConsumer{TEvent}"/> for each event type to the host's Wolverine setup.
-/// <see cref="HestiaApiFactory"/> adds it to every test host, for every event type: Wolverine reuses the code that it
-/// compiled for a message type in one process, so all hosts of a test run must have the same consumers.
+/// <see cref="HestiaApiFactory"/> adds it to every test host, for every event type, so a test needs no setup to see the
+/// events, and all test hosts have the same consumers.
 /// </summary>
 public sealed class RecordEvents(IReadOnlyList<Type> eventTypes) : IWolverineExtension
 {

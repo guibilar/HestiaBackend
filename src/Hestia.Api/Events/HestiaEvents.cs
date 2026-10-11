@@ -84,7 +84,8 @@ internal sealed class HestiaEventsSetup(IConfiguration configuration, IReadOnlyL
             wolverine.Discovery.IncludeAssembly(assembly);
         }
 
-        // Always registered, and quiet unless LogAll is on: so the set of handlers does not depend on a setting.
+        // Always registered, and quiet unless LogAll is on: the setting can change without a restart, and the set of
+        // consumers does not depend on it.
         foreach (var eventType in HestiaEvents.EventTypes(modules))
         {
             wolverine.Discovery.IncludeType(typeof(EventLog<>).MakeGenericType(eventType));

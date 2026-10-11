@@ -168,10 +168,13 @@ public class ModuleEventTests
     }
 
     [Fact]
-    public async Task DebugConsumer_IsOff_ByDefault()
+    public async Task DebugConsumer_IsQuiet_WhenLogAllIsOff()
     {
         var logs = new LogCapture();
-        await using var factory = new HestiaApiFactory(configureServices: services => services.AddSingleton<ILoggerProvider>(logs));
+        // The test host runs in Development, where appsettings.Development.json turns LogAll on.
+        await using var factory = new HestiaApiFactory(
+            new Dictionary<string, string?> { ["Events:LogAll"] = "false" },
+            services => services.AddSingleton<ILoggerProvider>(logs));
         var client = factory.CreateClient();
 
         await client.PostAsJsonAsync(Items, new CreateSampleItemRequest("Kettle"));
