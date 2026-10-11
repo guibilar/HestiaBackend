@@ -13,7 +13,9 @@ public class HostTests
     [InlineData("/health/ready")]
     public async Task HealthChecks_Answer200(string path)
     {
-        await using var factory = new HestiaApiFactory();
+        // /health/ready also asks finance (see FinanceProxyTests).
+        await using var finance = await FakeFinance.StartAsync();
+        await using var factory = new HestiaApiFactory(finance.HostSettings());
 
         var response = await factory.CreateClient().GetAsync(path);
 
