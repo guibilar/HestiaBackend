@@ -20,10 +20,13 @@ namespace Hestia.Testing;
 /// <summary>
 /// Runs the real host, with all modules, against a private database: in-memory by default, or a database
 /// on the PostgreSQL server that <see cref="TestDatabase"/> picked, migrated by the host on start (as in Docker).
+/// Requests are signed in as <see cref="TestSignIn"/> unless <paramref name="signedIn"/> is false: then the real
+/// sign-in of the Identity module is in charge. The gateway signing key is <see cref="TestGatewayKey"/>.
 /// </summary>
 public class HestiaApiFactory(
     IReadOnlyDictionary<string, string?>? settings = null,
-    Action<IServiceCollection>? configureServices = null) : WebApplicationFactory<Program>
+    Action<IServiceCollection>? configureServices = null,
+    bool signedIn = true) : WebApplicationFactory<Program>
 {
     private readonly string _databaseName = $"hestia_test_{Guid.NewGuid():N}";
     private readonly InMemoryDatabaseRoot _inMemoryRoot = new();
@@ -50,6 +53,10 @@ public class HestiaApiFactory(
             // The in-memory provider has no migrations.
             builder.UseSetting("Database:MigrateOnStartup", "false");
         }
+        builder.UseSetting("FinanceProxy:SigningKey", TestGatewayKey.SigningKey);
+        // The test host runs in Development: no development account (a test makes the accounts that it needs).
+        builder.UseSetting("Identity:InitialUser:Username", "");
+        builder.UseSetting("Identity:InitialUser:Password", "");
         foreach (var (key, value) in settings ?? new Dictionary<string, string?>())
         {
             builder.UseSetting(key, value);
@@ -64,6 +71,10 @@ public class HestiaApiFactory(
                 services.RemoveAll<IDatabaseOptionsConfigurator>();
                 services.AddSingleton<IDatabaseOptionsConfigurator>(
                     new InMemoryDatabaseOptionsConfigurator(_databaseName, _inMemoryRoot));
+            }
+            if (signedIn)
+            {
+                TestSignIn.Register(services);
             }
             configureServices?.Invoke(services);
         });

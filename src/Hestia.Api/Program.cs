@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Hestia.Api;
 using Hestia.Api.Events;
 using Hestia.Api.Gateway;
 using Hestia.Platform.Errors;
@@ -44,15 +45,29 @@ if (app.Configuration.GetValue<bool>("Database:MigrateOnStartup"))
     await HestiaDatabase.MigrateAsync(app.Services);
 }
 
+// A module command (for example "import-finance-user") runs in place of the web server.
+if (ModuleCommands.Find(app.Services, args) is { } command)
+{
+    Environment.ExitCode = await ModuleCommands.RunAsync(app.Services, command, args);
+    return;
+}
+
 // First, so everything after it sees the scheme and the address that the client used.
 app.UseForwardedHeaders();
 app.UseExceptionHandler();
 app.UseStatusCodePages();
 
+// Sign-in (the Identity module, D5): every endpoint needs a signed-in user unless it allows anonymous users.
+// The finance proxy routes too: an anonymous request does not reach finance.
+app.UseAuthentication();
+app.UseAuthorization();
+// After the authorization, so only requests that it lets in count towards a limit (the password tries).
+app.UseRateLimiter();
+
 // Liveness: the process answers (no dependencies, so a database outage does not restart the host).
-app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
+app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false }).AllowAnonymous();
 // Readiness: the host can serve requests (each module database and the finance backend answer).
-app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Tags.Contains(ReadyTag) });
+app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Tags.Contains(ReadyTag) }).AllowAnonymous();
 
 foreach (var module in modules)
 {
@@ -61,6 +76,8 @@ foreach (var module in modules)
 
 // After the modules. The finance routes have a lower priority, so a module endpoint on the same path wins.
 app.MapFinanceProxy();
+// A warning in the log for each module endpoint on a finance path.
+FinanceProxy.WarnAboutOverlaps(app);
 
 app.Run();
 

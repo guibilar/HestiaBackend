@@ -113,8 +113,16 @@ jobs:
     env:
       POSTGRES_PASSWORD: ci-database-password
       EVENTS_RABBITMQ_URL: amqp://hestia:ci-rabbitmq-password@rabbitmq:5672
+      HESTIA_USERNAME: ci
+      HESTIA_PASSWORD: ci-password-long-enough
     steps:
       - uses: actions/checkout@v7
+      # T03: the key pair of the gateway tokens, as in the README ("Sign-in"). New for each run.
+      - name: The gateway signing key
+        run: |
+          openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out "$RUNNER_TEMP/gateway.key"
+          echo "GATEWAY_SIGNING_KEY=$(openssl pkcs8 -topk8 -nocrypt -in "$RUNNER_TEMP/gateway.key" -outform DER | base64 -w0)" >> "$GITHUB_ENV"
+          rm "$RUNNER_TEMP/gateway.key"
       # On the server, the finance project makes this network.
       - name: The shared "finance" network
         run: docker network create finance
@@ -143,26 +151,43 @@ jobs:
         run: |
           for i in $(seq 1 60); do curl -sf http://localhost:5097/health/ready && exit 0; sleep 1; done
           exit 1
-      - name: Finance paths go through the host to finance, unchanged
+      # T03: health, sign-in, the session cookie, a module, finance (the stub), sign-out, and 401 without a session.
+      - name: Smoke test (docker/smoke-test.sh)
+        run: docker/smoke-test.sh http://localhost:5097
+      - name: Sign in (a session cookie for the next steps)
         run: |
-          body=$(curl -sf -H 'Host: hestia.example.ts.net' -H 'X-Forwarded-Proto: https' -H 'Cookie: finance_session=abc' \
+          session=$(curl -sf -D - -o /dev/null -H 'Content-Type: application/json' \
+            -d "{\"username\":\"$HESTIA_USERNAME\",\"password\":\"$HESTIA_PASSWORD\"}" http://localhost:5097/api/Auth/login \
+            | grep -i '^set-cookie: finance_session=' | sed -E 's/^[^:]*: ([^;]*);.*/\1/I')
+          test -n "$session"
+          echo "SESSION_COOKIE=$session" >> "$GITHUB_ENV"
+      - name: Finance paths go through the host to finance, with a gateway token and without the session cookie
+        run: |
+          body=$(curl -sf -H 'Host: hestia.example.ts.net' -H 'X-Forwarded-Proto: https' -H "Cookie: $SESSION_COOKIE; theme=dark" \
             'http://localhost:5097/api/Transaction?categoryId=4&startDate=2026-10-01')
-          echo "$body"
+          echo "$body" | jq 'del(.authorization)'
           echo "$body" | jq -e '.stub == "finance"
             and .path == "/api/Transaction?categoryId=4&startDate=2026-10-01"
             and .host == "hestia.example.ts.net"
             and .forwardedProto == "https"
-            and .cookie == "finance_session=abc"'
+            and .cookie == "theme=dark"
+            and (.authorization | startswith("Bearer "))'
+          # The claims of the token (the tests check the signature as finance does).
+          payload=$(echo "$body" | jq -r '.authorization | ltrimstr("Bearer ") | split(".")[1] | gsub("-"; "+") | gsub("_"; "/")')
+          while [ $(( ${#payload} % 4 )) -ne 0 ]; do payload="$payload="; done
+          echo "$payload" | base64 -d | jq -e '.iss == "hestia-api" and .aud == "finance" and .name == "ci"
+            and .scope == "full" and (.exp - .iat) == 60'
       - name: Module paths stay in the host
         run: |
-          body=$(curl -sf http://localhost:5097/api/sample/items)
+          body=$(curl -sf -H "Cookie: $SESSION_COOKIE" http://localhost:5097/api/sample/items)
           echo "$body"
           echo "$body" | jq -e 'has("stub") | not'
       - name: A module event reaches its consumer after the commit (in process)
         run: |
-          curl -sf -X POST -H 'Content-Type: application/json' -d '{"name":"CI kettle"}' http://localhost:5097/api/sample/items
+          curl -sf -H "Cookie: $SESSION_COOKIE" -X POST -H 'Content-Type: application/json' -d '{"name":"CI kettle"}' \
+            http://localhost:5097/api/sample/items
           for i in $(seq 1 30); do
-            body=$(curl -sf http://localhost:5097/api/sample/activity)
+            body=$(curl -sf -H "Cookie: $SESSION_COOKIE" http://localhost:5097/api/sample/activity)
             echo "$body" | jq -e '.itemsCreated == 1 and .lastItemName == "CI kettle"' && exit 0
             sleep 1
           done

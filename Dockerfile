@@ -7,6 +7,8 @@ COPY ["src/Hestia.Api/Hestia.Api.csproj", "src/Hestia.Api/"]
 COPY ["src/Hestia.Platform/Hestia.Platform.csproj", "src/Hestia.Platform/"]
 COPY ["src/Hestia.Contracts/Hestia.Contracts.csproj", "src/Hestia.Contracts/"]
 # Modules: two lines per module (see docs/new-module.md).
+COPY ["src/Modules/Identity/Hestia.Modules.Identity/Hestia.Modules.Identity.csproj", "src/Modules/Identity/Hestia.Modules.Identity/"]
+COPY ["src/Modules/Identity/Hestia.Modules.Identity.Contracts/Hestia.Modules.Identity.Contracts.csproj", "src/Modules/Identity/Hestia.Modules.Identity.Contracts/"]
 COPY ["src/Modules/Sample/Hestia.Modules.Sample/Hestia.Modules.Sample.csproj", "src/Modules/Sample/Hestia.Modules.Sample/"]
 COPY ["src/Modules/Sample/Hestia.Modules.Sample.Contracts/Hestia.Modules.Sample.Contracts.csproj", "src/Modules/Sample/Hestia.Modules.Sample.Contracts/"]
 RUN dotnet restore "src/Hestia.Api/Hestia.Api.csproj"
