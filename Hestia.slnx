@@ -13,11 +13,16 @@
     <Project Path="src/Modules/Sample/Hestia.Modules.Sample/Hestia.Modules.Sample.csproj" />
     <Project Path="src/Modules/Sample/Hestia.Modules.Sample.Contracts/Hestia.Modules.Sample.Contracts.csproj" />
   </Folder>
+  <Folder Name="/src/Modules/Today/">
+    <Project Path="src/Modules/Today/Hestia.Modules.Today/Hestia.Modules.Today.csproj" />
+    <Project Path="src/Modules/Today/Hestia.Modules.Today.Contracts/Hestia.Modules.Today.Contracts.csproj" />
+  </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Hestia.Api.Tests/Hestia.Api.Tests.csproj" />
     <Project Path="tests/Hestia.Architecture.Tests/Hestia.Architecture.Tests.csproj" />
     <Project Path="tests/Hestia.Modules.Identity.Tests/Hestia.Modules.Identity.Tests.csproj" />
     <Project Path="tests/Hestia.Modules.Sample.Tests/Hestia.Modules.Sample.Tests.csproj" />
+    <Project Path="tests/Hestia.Modules.Today.Tests/Hestia.Modules.Today.Tests.csproj" />
     <Project Path="tests/Hestia.Platform.Tests/Hestia.Platform.Tests.csproj" />
     <Project Path="tests/Hestia.Testing/Hestia.Testing.csproj" />
   </Folder>

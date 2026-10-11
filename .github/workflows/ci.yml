@@ -192,6 +192,14 @@ jobs:
           body=$(curl -sf -H "Cookie: $SESSION_COOKIE" http://localhost:5097/api/sample/items)
           echo "$body"
           echo "$body" | jq -e 'has("stub") | not'
+      # T08: the Today cards. The stub answers every finance report with its echo, so the account list does not
+      # load and the Money module is "Partial"; the four tiles are there. The host found its time zone (Today__TimeZone).
+      - name: Today answers with the Money cards first
+        run: |
+          body=$(curl -sf -H "Cookie: $SESSION_COOKIE" http://localhost:5097/api/today)
+          echo "$body" | jq -c '{date, modules, tiles: [.cards[] | select(.type == "Tile") | .id]}'
+          echo "$body" | jq -e '.modules[0].module == "Money" and .modules[0].status == "Partial"
+            and ([.cards[] | select(.type == "Tile") | .id] == ["money.spent-this-month", "money.left-over-this-month", "money.net-worth", "money.budgets"])'
       - name: A module event reaches its consumer after the commit (in process)
         run: |
           curl -sf -H "Cookie: $SESSION_COOKIE" -X POST -H 'Content-Type: application/json' -d '{"name":"CI kettle"}' \

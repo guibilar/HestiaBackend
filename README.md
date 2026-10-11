@@ -18,9 +18,10 @@ src/
   Hestia.Api/                       host: composition root, health checks, finance proxy (Gateway/)
   Hestia.Platform/                  shared kernel: base entity, paging, exceptions, error handler,
                                     health check, reverse proxy setup, IModule, module database setup
-  Hestia.Contracts/                 contracts shared with other processes (finance events, Today cards), a NuGet package
+  Hestia.Contracts/                 contracts shared with other processes (finance events), a NuGet package
   Modules/
     Identity/                       sign-in: users, sessions, the read-only token, /api/Auth (T03)
+    Today/                          the Today screen: /api/today, the cards of all modules (T08)
     Sample/
       Hestia.Modules.Sample/            internal: Domain, Application, Infrastructure, Endpoints
       Hestia.Modules.Sample.Contracts/  public: DTOs, events, query interfaces
@@ -31,6 +32,7 @@ tests/
   Hestia.Api.Tests/
   Hestia.Modules.Identity.Tests/
   Hestia.Modules.Sample.Tests/
+  Hestia.Modules.Today.Tests/
 ```
 
 Package versions are in `Directory.Packages.props`. Shared build settings (net10.0, nullable,
@@ -208,6 +210,47 @@ public sealed class BudgetAlertConsumer(IFinanceClient finance)
 - Module events reach their consumers without the HTTP request that raised them, so a module event consumer can use
   `AsSystem` too.
 - Finance needs no change: it sees a normal gateway token with a known scope.
+
+## Today
+
+The Today module (T08) gives the Today screen of both clients all its cards in one answer: `GET /api/today`. The card
+logic is in one place, here, and not in the web and Android clients.
+
+- Each module that shows cards registers an `ITodayCardProvider` (`Hestia.Modules.Today.Contracts`). The Today module
+  calls all providers at the same time, inside the request of the user. See [docs/new-module.md](docs/new-module.md).
+- **Finance (Money) comes first** (D11). Its provider is in the Today module, because finance is a separate service. It
+  reads eight finance reports with `IFinanceClient`, as the signed-in user, and never reads the finance database:
+  - four tiles: spent this month (against a usual month by now, or against last month so far in January), left over
+    this month, net worth and its change since last month, and budgets over their limit;
+  - the "Needs attention" items: budgets over their limit, no statement import for more than 7 days, accounts whose
+    statements stop before last month, price changes of the last 45 days, and transactions that no rule sorts.
+
+  The rules are the same as the web dashboard (`dashboard-stats.ts`, `attention.ts`) and the Android app
+  (`core/logic/Attention.kt`).
+- **Failures:** a provider that throws, or does not answer in `Today:ProviderTimeout`, gives no cards. Its module has
+  the status `Failed`, and the answer is still 200. When one finance report does not load, its tile has no value and
+  the text "Could not load this", and the module has the status `Partial`.
+- **Cache:** a complete answer stays for `Today:CacheDuration` (30 seconds), for each user and scope.
+  `GET /api/today?refresh=true` makes a new one (for pull to refresh).
+- **Formatting is the client's job.** A card text has placeholders, for example `{difference} under a usual month by
+  now`, and the card's `values` give each one with its type (`Money`, `Count`, `Percent`, `Date`, `Text`). So the
+  clients keep their own currency and date formats, and privacy mode hides the amounts.
+- A read-only user can call it (a GET). Finance then gets the `read-only` scope.
+
+| Setting (`Today` section) | Default | Description |
+| --- | --- | --- |
+| `TimeZone` | `America/Toronto` | The IANA time zone that decides which day it is. Use the same zone as finance (`Reports:TimeZone`), so "this month" is the same month. Docker: `TZ` in `.env`. |
+| `CacheDuration` | `00:00:30` | How long a complete answer stays for a user. `00:00:00` turns the cache off. |
+| `ProviderTimeout` | `00:00:15` | How long the host waits for one module's cards. |
+
+### OpenAPI document
+
+The host describes the module endpoints (not the finance paths) at `/openapi/v1.json`. The Angular and Kotlin clients
+can generate their models from it. Like every endpoint, it needs a signed-in user, for example the read-only token:
+
+```bash
+curl -H "Authorization: Bearer $HESTIA_READONLY_TOKEN" http://localhost:5097/openapi/v1.json > hestia-openapi.json
+```
 
 ## Finance proxy
 
