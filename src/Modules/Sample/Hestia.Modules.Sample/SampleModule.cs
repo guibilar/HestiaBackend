@@ -30,6 +30,8 @@ public static class SampleModuleExtensions
         services.AddModuleDbContext<SampleDbContext>(SampleDbContext.SchemaName);
         services.AddScoped<SampleItemService>();
         services.AddScoped<ISampleItemQueries, SampleItemQueries>();
+        // Event consumers (SampleItemCreatedConsumer) need no registration: Wolverine finds them in the module assembly.
+        services.AddSingleton<SampleActivity>();
         return services;
     }
 

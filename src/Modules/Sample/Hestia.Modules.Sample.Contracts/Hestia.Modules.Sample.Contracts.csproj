@@ -3,6 +3,8 @@
   <!-- Public: what other modules may use. It references only Hestia.Platform and Hestia.Contracts. -->
   <ItemGroup>
     <ProjectReference Include="..\..\..\Hestia.Platform\Hestia.Platform.csproj" />
+    <!-- For IIntegrationEvent: module events implement it, like the finance events. -->
+    <ProjectReference Include="..\..\..\Hestia.Contracts\Hestia.Contracts.csproj" />
   </ItemGroup>
 
 </Project>

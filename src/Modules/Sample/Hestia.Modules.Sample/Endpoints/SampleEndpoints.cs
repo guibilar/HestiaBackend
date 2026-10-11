@@ -23,5 +23,8 @@ public static class SampleEndpoints
             var item = await service.CreateAsync(request, cancellationToken);
             return Results.Created($"{Prefix}/items/{item.Id}", item);
         });
+
+        // What the event consumer saw: SampleItemCreated reaches it after each item is committed.
+        endpoints.MapGet($"{Prefix}/activity", (SampleActivity activity) => activity.Read());
     }
 }

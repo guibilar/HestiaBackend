@@ -33,6 +33,8 @@ public class SampleItemService(SampleDbContext db, TimeProvider time)
 
         var item = new SampleItem { Id = Guid.CreateVersion7(), Name = name, CreatedAt = time.GetUtcNow() };
         db.Items.Add(item);
+        // A module event: published to its consumers after this save commits, and never if it fails.
+        db.RaiseEvent(new SampleItemCreated(item.Id, item.Name, item.CreatedAt));
         await db.SaveChangesAsync(cancellationToken);
         return ToDto(item);
     }
