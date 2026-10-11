@@ -8,7 +8,7 @@ on:
   schedule:
     - cron: '17 6 * * 1'
 
-# Bash with pipefail, so a command piped into tee still fails its step.
+# Bash with pipefail: a failed command in a pipe fails its step.
 defaults:
   run:
     shell: bash
@@ -23,11 +23,11 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
-      - run: dotnet restore 2>&1 | tee restore.log
+      - run: dotnet restore
       # Packages that the host ships with; test-only packages and low-severity advisories do not block.
       - name: Known vulnerabilities
         run: sh scripts/check-vulnerable-packages.sh
-      - run: dotnet build --no-restore 2>&1 | tee build.log
+      - run: dotnet build --no-restore
       # The code-style rules that .editorconfig sets as warnings (file-scoped namespaces); whitespace is left alone.
       - name: Code style
         run: dotnet format style --verify-no-changes --no-restore --severity warn
@@ -38,38 +38,14 @@ jobs:
 
       # Includes the architecture tests (tests/Hestia.Architecture.Tests): the module rules of D6.
       - name: Tests (in-memory database)
-        run: dotnet test --no-build 2>&1 | tee test-in-memory.log
+        run: dotnet test --no-build
 
       # The tests start PostgreSQL and RabbitMQ themselves in Docker (Testcontainers) and remove them afterwards.
       - name: Tests (PostgreSQL migrated from scratch, RabbitMQ)
-        run: dotnet test --no-build 2>&1 | tee test-postgres.log
+        run: dotnet test --no-build
         env:
           HESTIA_TEST_POSTGRES: container
           HESTIA_TEST_RABBITMQ: container
-
-      # TEMPORARY (T04): task sessions cannot read the logs. T26 replaces this with proper annotations.
-      - name: TEMP failures as annotations
-        if: failure()
-        run: |
-          python3 - <<'EOF'
-          import os, re
-          count = 0
-          for name in ["restore.log", "build.log", "test-in-memory.log", "test-postgres.log"]:
-              if not os.path.exists(name) or count >= 9:
-                  continue
-              lines = open(name, errors="replace").read().splitlines()
-              keep = [i for i, l in enumerate(lines) if re.search(r"error|failed|Failed|Exception|Assert\.|Expected|Actual", l)]
-              picked = []
-              for i in keep:
-                  picked.extend(lines[max(0, i - 1): i + 4])
-              text = "\n".join(dict.fromkeys(picked)) or "\n".join(lines[-60:])
-              for start in range(0, len(text), 3500):
-                  if count >= 9:
-                      break
-                  chunk = text[start:start + 3500].replace("%", "%25").replace("\r", "").replace("\n", "%0A")
-                  print(f"::error title={name} part {start // 3500 + 1}::{chunk}")
-                  count += 1
-          EOF
 
   # Publishes Hestia.Contracts to GitHub Packages, for the finance backend (T04).
   # main: the version in the project file (once: a version that exists is skipped).
@@ -95,10 +71,21 @@ jobs:
           dotnet-version: 10.0.x
       - name: Decide the version
         id: version
+        env:
+          # A new push to the pull request: the head before it. A new pull request: empty.
+          BEFORE: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
-            if git diff --quiet "origin/$GITHUB_BASE_REF...HEAD" -- src/Hestia.Contracts; then
+            if git diff --quiet "origin/$GITHUB_BASE_REF...$HEAD_SHA" -- src/Hestia.Contracts; then
               echo "The pull request does not change the contracts: nothing to publish."
+              echo "publish=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            # A push that does not change the contracts again: the last prerelease is still current.
+            if [ -n "$BEFORE" ] && git cat-file -e "$BEFORE^{commit}" 2>/dev/null \
+                && git diff --quiet "$BEFORE" "$HEAD_SHA" -- src/Hestia.Contracts; then
+              echo "This push does not change the contracts: the last prerelease is current."
               echo "publish=false" >> "$GITHUB_OUTPUT"
               exit 0
             fi
@@ -201,12 +188,6 @@ jobs:
           docker compose logs
           docker logs personal-finance-api
           docker logs rabbitmq | tail -50
-      # TEMPORARY (T04): task sessions cannot read the logs.
-      - name: TEMP container logs as annotations
-        if: failure()
-        run: |
-          docker compose logs --no-color hestia-api 2>&1 | grep -E "fail|error|Exception|warn" | head -40 > host.log || true
-          python3 -c "import sys; t=open('host.log').read()[:3500].replace('%','%25').replace('\n','%0A'); print('::error title=hestia-api log::'+t)"
       - name: Stop the stack
         if: always()
         run: |
