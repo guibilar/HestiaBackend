@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'probe/**']
   pull_request:
   # Weekly, so advisories published after the last commit still fail the vulnerability check.
   schedule:
@@ -33,11 +33,21 @@ jobs:
 
       # Includes the architecture tests (tests/Hestia.Architecture.Tests): the module rules of D6.
       - name: Tests (in-memory database)
-        run: dotnet test --no-build
+        run: |
+          set +e
+          dotnet test --no-build > test.log 2>&1
+          code=$?
+          grep -E "failed|Failed|passed|Passed|Skipped|skipped|total|Total|must not reference" test.log | head -40 | while IFS= read -r line; do echo "::notice::$line"; done
+          exit $code
 
       # The tests start PostgreSQL themselves in Docker (Testcontainers) and remove it afterwards.
       - name: Tests (PostgreSQL, migrated from scratch)
-        run: dotnet test --no-build
+        run: |
+          set +e
+          dotnet test --no-build > test.log 2>&1
+          code=$?
+          grep -E "failed|Failed|passed|Passed|Skipped|skipped|total|Total|must not reference" test.log | head -40 | while IFS= read -r line; do echo "::notice::$line"; done
+          exit $code
         env:
           HESTIA_TEST_POSTGRES: container
 

@@ -12,4 +12,8 @@
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\Hestia.Contracts\Hestia.Contracts.csproj" />
+  </ItemGroup>
+
 </Project>
