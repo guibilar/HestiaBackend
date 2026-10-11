@@ -142,6 +142,9 @@ jobs:
           docker run -d --name rabbitmq --network finance \
             -e RABBITMQ_DEFAULT_USER=hestia -e RABBITMQ_DEFAULT_PASS=ci-rabbitmq-password rabbitmq:4-alpine
           for i in $(seq 1 60); do docker exec rabbitmq rabbitmq-diagnostics -q ping && exit 0; sleep 2; done
+          # TEMPORARY (T04): the broker log as an annotation.
+          docker ps -a
+          docker logs rabbitmq 2>&1 | tail -40 | python3 -c "import sys; t=sys.stdin.read()[-3500:].replace('%','%25').replace('\n','%0A'); print('::error title=rabbitmq log::'+t)"
           exit 1
       - name: Build and start the stack (host, PostgreSQL, and backup, as deployed)
         run: docker compose up -d --build --wait
