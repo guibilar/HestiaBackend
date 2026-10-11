@@ -6,6 +6,7 @@ one ASP.NET Core host, `Hestia.Api`, with all Hestia modules inside it (a modula
 - The host is the gateway in front of the finance service, [PersonalFinanceInsightsBackend](https://github.com/guibilar/PersonalFinanceInsightsBackend).
   It proxies the finance paths to it (see [Finance proxy](#finance-proxy)). It will also sign users in (T03).
 - Each new module (Documents, Tasks, People, Journal, Home, and others) lives in the host as a module.
+- Modules send events to each other in process, and the host gets the finance events from RabbitMQ (see [Events](#events)).
 - Clients reach the host only through Tailscale HTTPS and the frontend's nginx. Nothing is open to the internet.
 
 .NET 10, EF Core, PostgreSQL.
@@ -17,7 +18,7 @@ src/
   Hestia.Api/                       host: composition root, health checks, finance proxy (Gateway/)
   Hestia.Platform/                  shared kernel: base entity, paging, exceptions, error handler,
                                     health check, reverse proxy setup, IModule, module database setup
-  Hestia.Contracts/                 contracts shared with other processes (finance events, Today cards)
+  Hestia.Contracts/                 contracts shared with other processes (finance events, Today cards), a NuGet package
   Modules/
     Sample/
       Hestia.Modules.Sample/            internal: Domain, Application, Infrastructure, Endpoints
@@ -77,6 +78,7 @@ Endpoints now:
 | `GET /health/ready` | The host can serve requests: each module can connect to its database, and finance answers its `/health/ready`. |
 | `GET /api/sample/items?page=1&pageSize=20` | Sample module: a page of items. |
 | `POST /api/sample/items` | Sample module: make an item, `{ "name": "Kettle" }`. |
+| `GET /api/sample/activity` | Sample module: what its event consumer saw since the host started (`itemsCreated`, `lastItemName`). |
 | `/api/Accounts`, `/api/Auth`, `/api/Transaction`, and the other finance paths | Proxied to the finance backend, unchanged. |
 
 In Development, the host sends the finance paths to `http://localhost:5096` (the finance backend's `dotnet run` address).
@@ -123,15 +125,81 @@ What the proxy keeps and changes:
 The tests use `FakeFinance` (in `tests/Hestia.Testing`): a small finance stand-in on a real local port, which records
 each request as finance would see it.
 
+## Events
+
+Decision D7, built in T04 with [Wolverine](https://wolverinefx.net) (MIT licence). There are two paths. A consumer gets
+an event in the same way on both, and does not know which path it used.
+
+```
+module A ──RaiseEvent──> DbContext ──SaveChanges / commit──> post-commit dispatcher ──in process──> consumers
+finance ──outbox (same transaction)──> RabbitMQ exchange "hestia.finance-events" ──queue "hestia.api.finance-events"──> consumers
+```
+
+**Module events (in process).** A module raises an event on its own DbContext, and saves:
+
+```csharp
+db.Items.Add(item);
+db.RaiseEvent(new SampleItemCreated(item.Id, item.Name, item.CreatedAt));
+await db.SaveChangesAsync(cancellationToken);
+```
+
+The platform (`Hestia.Platform/Events/ModuleEventsInterceptor.cs`) publishes the event only after the change is committed:
+after `SaveChanges`, or, in an explicit transaction, when the transaction commits. A failed save or a rollback publishes
+nothing. This path is not durable: if the process stops between the commit and the publish, the event is lost.
+
+**Finance events (RabbitMQ).** The finance service writes each event to its outbox in the same transaction as the change,
+and sends it to the fanout exchange `hestia.finance-events` after the commit. The host binds its queue
+`hestia.api.finance-events` to that exchange and acknowledges a message only after its consumers finish. A consumer that
+fails gets the Wolverine retries, then the message goes to the dead-letter queue. A consumer can get an event more than
+once, so make each consumer idempotent. The events are in `Hestia.Contracts/Finance/FinanceEvents.cs`:
+`TransactionsImported`, `TransactionChanged`, `BudgetLimitReached`, `BalanceRecorded`, and `SubscriptionPriceChanged`.
+
+**A consumer** is a Wolverine handler in a module project: a public class whose name ends in `Consumer`, with a public
+`Consume` method that takes the event first. Other parameters come from the service container. The host finds the
+consumers in each module assembly. The template is `SampleItemCreatedConsumer`.
+
+```csharp
+public sealed class TransactionsImportedConsumer(ILogger<TransactionsImportedConsumer> logger)
+{
+    public void Consume(TransactionsImported message) => logger.LogInformation("{Added} new transactions", message.Added);
+}
+```
+
+Settings (section `Events`):
+
+| Setting | Default | Description |
+| --- | --- | --- |
+| `RabbitMq` | empty | The broker, for example `amqp://hestia:secret@rabbitmq:5672`. Docker: `EVENTS_RABBITMQ_URL` in `.env`. Empty: no finance events; the module events still work. |
+| `LogAll` | `false` (`true` in Development) | A debug consumer logs every event (finance and module events) with all its values. Docker: `EVENTS_LOG_ALL`. |
+
+The broker runs in the finance project (its `events` profile), on the network `finance`. If the broker is down when the
+host starts, the host starts without the finance events and logs an error: restart the host when the broker is back.
+Until a module consumes a finance event, the host takes it from the queue and drops it (or logs it, with `LogAll`).
+
+### The contracts package
+
+The finance service uses the events from the NuGet package `Hestia.Contracts`, on GitHub Packages
+(`https://nuget.pkg.github.com/guibilar/index.json`). The CI job `contracts-package` publishes it:
+
+- On `main`: the version in `src/Hestia.Contracts/Hestia.Contracts.csproj` (`VersionPrefix`), once. A version that exists is skipped.
+- On a pull request that changes `src/Hestia.Contracts`: a prerelease, `<version>-pr.<number>.<run>`, for a finance
+  pull request that needs the new contracts before this one merges.
+
+When you change a contract, increase `VersionPrefix`, and follow the rules in `IIntegrationEvent`: add a property with a
+default value, or make a new event type. `Hestia.Contracts` must not reference other packages or projects (the
+architecture tests check this).
+
 ## Test
 
 ```bash
 dotnet test                                     # in-memory database (fast)
-HESTIA_TEST_POSTGRES=container dotnet test      # PostgreSQL in Docker (Testcontainers), migrated from scratch
+HESTIA_TEST_POSTGRES=container HESTIA_TEST_RABBITMQ=container dotnet test   # PostgreSQL and RabbitMQ in Docker (Testcontainers)
 ```
 
 `HESTIA_TEST_POSTGRES` can also be the connection string of a PostgreSQL server that you run yourself.
-Each test host gets its own database, and the tests delete it at the end.
+Each test host gets its own database, and the tests delete it at the end. `HESTIA_TEST_RABBITMQ` can also be the
+`amqp://` address of a broker that you run yourself. Without it, the RabbitMQ tests are skipped.
+`EventRecorder` (in `tests/Hestia.Testing`) adds a recording consumer to a test host, for any event type.
 
 CI also runs these checks:
 
@@ -171,6 +239,8 @@ restart the frontend (`docker compose up -d`). To go back, remove the line: ngin
 
 CI does the same with a small nginx stand-in for finance (`docker/ci/finance-stub.conf`). It checks that a finance path
 reaches finance with its query string, `Host`, cookies, and `X-Forwarded-Proto`, and that a module path stays in the host.
+It also starts a RabbitMQ broker on `finance`, and checks that a module event reaches its consumer and that the host's
+queue is bound to the finance exchange.
 
 ### Backups
 
