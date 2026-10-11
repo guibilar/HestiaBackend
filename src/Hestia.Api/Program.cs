@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Hestia.Api.Gateway;
 using Hestia.Platform.Errors;
 using Hestia.Platform.Health;
 using Hestia.Platform.Hosting;
@@ -15,6 +16,8 @@ builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.Converters.Add(new JsonStringEnumConverter(allowIntegerValues: false)));
 
 builder.Services.AddReverseProxySupport(builder.Configuration);
+// The gateway: finance paths go to the finance backend (FinanceProxy section).
+builder.Services.AddFinanceProxy(builder.Configuration);
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 builder.Services.AddSingleton(TimeProvider.System);
@@ -25,7 +28,8 @@ foreach (var module in modules)
 }
 
 builder.Services.AddHealthChecks()
-    .AddCheck<DatabaseHealthCheck>("database", tags: [ReadyTag]);
+    .AddCheck<DatabaseHealthCheck>("database", tags: [ReadyTag])
+    .AddCheck<FinanceHealthCheck>("finance", tags: [ReadyTag]);
 
 var app = builder.Build();
 
@@ -44,13 +48,16 @@ app.UseStatusCodePages();
 
 // Liveness: the process answers (no dependencies, so a database outage does not restart the host).
 app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
-// Readiness: the host can serve requests.
+// Readiness: the host can serve requests (each module database and the finance backend answer).
 app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Tags.Contains(ReadyTag) });
 
 foreach (var module in modules)
 {
     module.MapEndpoints(app);
 }
+
+// After the modules. The finance routes have a lower priority, so a module endpoint on the same path wins.
+app.MapFinanceProxy();
 
 app.Run();
 

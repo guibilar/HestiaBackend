@@ -22,12 +22,14 @@ services:
     environment:
       ConnectionStrings__Hestia: "Host=hestia-db;Port=5432;Database=${POSTGRES_DB:-Hestia};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}"
       Database__MigrateOnStartup: "true"
+      # The finance backend (T02: the host proxies the finance paths to it). Its container name on "finance".
+      FinanceProxy__Address: ${FINANCE_API_URL:-http://personal-finance-api:8080}
     depends_on:
       hestia-db:
         condition: service_healthy
     restart: unless-stopped
     logging: *logging
-    # The image has no curl: bash asks /health/live itself (the process answers; no database needed).
+    # The image has no curl: bash asks /health/live itself (the process answers; no database or finance needed).
     healthcheck:
       test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /health/live HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && head -n 1 <&3 | grep -q ' 200 '"]
       interval: 30s
