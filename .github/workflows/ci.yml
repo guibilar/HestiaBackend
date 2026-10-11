@@ -37,15 +37,25 @@ jobs:
         run: sh scripts/check-migrations.sh
 
       # Includes the architecture tests (tests/Hestia.Architecture.Tests): the module rules of D6.
+      # --report-xunit-trx: xUnit v3 writes one TRX file per test project, for the annotations (T26).
       - name: Tests (in-memory database)
-        run: dotnet test --no-build
+        id: tests-in-memory
+        run: dotnet test --no-build --results-directory TestResults/in-memory --report-xunit-trx
+      # Totals and failed tests as annotations: task sessions cannot read the logs, only the annotations.
+      - name: Test results (in-memory database)
+        if: always() && steps.tests-in-memory.outcome != 'skipped'
+        run: python3 scripts/test-annotations.py in-memory TestResults/in-memory
 
       # The tests start PostgreSQL and RabbitMQ themselves in Docker (Testcontainers) and remove them afterwards.
       - name: Tests (PostgreSQL migrated from scratch, RabbitMQ)
-        run: dotnet test --no-build
+        id: tests-postgres
+        run: dotnet test --no-build --results-directory TestResults/postgres --report-xunit-trx
         env:
           HESTIA_TEST_POSTGRES: container
           HESTIA_TEST_RABBITMQ: container
+      - name: Test results (PostgreSQL, RabbitMQ)
+        if: always() && steps.tests-postgres.outcome != 'skipped'
+        run: python3 scripts/test-annotations.py postgres TestResults/postgres
 
   # Publishes Hestia.Contracts to GitHub Packages, for the finance backend (T04).
   # main: the version in the project file (once: a version that exists is skipped).
