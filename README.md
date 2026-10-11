@@ -179,8 +179,35 @@ public sealed class MoneyTiles(IFinanceClient finance)
 ```
 
 A failed call throws `FinanceRequestException` (with the finance status, or none when finance does not answer).
-If an endpoint does not catch it, the client gets 502. Use the client in a request only: outside a request, there is
-no user, and the client refuses.
+If an endpoint does not catch it, the client gets 502. Without `AsSystem`, use the client in a request only: outside
+a request, there is no user, and the client refuses.
+
+#### Background work: the system identity
+
+An event consumer, a timer, or a host command has no signed-in user. It asks for the **system identity** explicitly
+(T42):
+
+```csharp
+public sealed class BudgetAlertConsumer(IFinanceClient finance)
+{
+    public async Task Consume(BudgetLimitReached message, CancellationToken cancellationToken)
+    {
+        var budgets = await finance.AsSystem("Alerts.BudgetAlertConsumer")
+            .GetAsync<List<BudgetDto>>("/api/Budget", cancellationToken);
+        // ...
+    }
+}
+```
+
+- The gateway token has `sub` = `hestia-system`, `name` = `system:<caller>`, and the scope `read-only`.
+- For a write, ask for it in code: `AsSystem("<caller>", FinanceAccess.Full)` (scope `full`).
+- The caller name has 1 to 64 letters, digits, `.`, `-`, or `_`. The host logs each system call with it, at Debug level
+  (category `Hestia.Api.Gateway.FinanceClient`).
+- The system client refuses to work inside an HTTP request, also when the request has no user. An endpoint always calls
+  finance as its signed-in user.
+- Module events reach their consumers without the HTTP request that raised them, so a module event consumer can use
+  `AsSystem` too.
+- Finance needs no change: it sees a normal gateway token with a known scope.
 
 ## Finance proxy
 

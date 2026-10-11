@@ -15,6 +15,9 @@ namespace Hestia.Api.Gateway;
 /// <para>Claims: <c>iss</c> = hestia-api, <c>aud</c> = finance, <c>sub</c> (user id), <c>name</c>, <c>scope</c>
 /// (<c>full</c> or <c>read-only</c>), <c>iat</c>, <c>nbf</c>, <c>exp</c> (<c>FinanceProxy:TokenLifetime</c>, 60 seconds),
 /// and <c>jti</c>.</para>
+/// <para>The system identity of background work (T42) has <c>sub</c> = <see cref="SystemSubject"/> and
+/// <c>name</c> = <c>system:&lt;caller&gt;</c>. Its scope is also <c>full</c> or <c>read-only</c>, so finance needs no
+/// change for it.</para>
 /// </summary>
 /// <remarks>
 /// The token is made here with the base library (no package): a fixed header and one ECDSA signature. Finance checks it
@@ -25,6 +28,12 @@ public sealed class GatewayTokens : IDisposable
     public const string Issuer = "hestia-api";
     public const string Audience = "finance";
     public const string ScopeClaim = "scope";
+
+    /// <summary>The <c>sub</c> of the system identity (background work, T42). No user account has this id.</summary>
+    public const string SystemSubject = "hestia-system";
+
+    /// <summary>The prefix of the <c>name</c> of the system identity, before the caller name.</summary>
+    public const string SystemNamePrefix = "system:";
 
     // {"alg":"ES256","typ":"JWT"}
     private static readonly string Header = Base64Url.EncodeToString("""{"alg":"ES256","typ":"JWT"}"""u8);
@@ -49,14 +58,32 @@ public sealed class GatewayTokens : IDisposable
         }
         var id = user.FindFirstValue(ClaimTypes.NameIdentifier) ?? identity.Name
             ?? throw new InvalidOperationException("The signed-in user has no id.");
+        return Create(id, identity.Name ?? id, HestiaUser.ScopeOf(user));
+    }
+
+    /// <summary>
+    /// A new token for the system identity (T42): background work with no user. <paramref name="scope"/> is
+    /// <see cref="HestiaUser.FullScope"/> or <see cref="HestiaUser.ReadOnlyScope"/>.
+    /// </summary>
+    public string CreateForSystem(string caller, string scope)
+    {
+        if (scope is not (HestiaUser.FullScope or HestiaUser.ReadOnlyScope))
+        {
+            throw new ArgumentException($"The scope must be {HestiaUser.FullScope} or {HestiaUser.ReadOnlyScope}.", nameof(scope));
+        }
+        return Create(SystemSubject, SystemNamePrefix + caller, scope);
+    }
+
+    private string Create(string subject, string name, string scope)
+    {
         var now = _time.GetUtcNow().ToUnixTimeSeconds();
         var claims = new Dictionary<string, object>
         {
             ["iss"] = Issuer,
             ["aud"] = Audience,
-            ["sub"] = id,
-            ["name"] = identity.Name ?? id,
-            [ScopeClaim] = HestiaUser.ScopeOf(user),
+            ["sub"] = subject,
+            ["name"] = name,
+            [ScopeClaim] = scope,
             ["iat"] = now,
             ["nbf"] = now,
             ["exp"] = now + (long)_lifetime.TotalSeconds,

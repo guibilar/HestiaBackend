@@ -2,6 +2,7 @@ using System.Reflection;
 using Hestia.Contracts;
 using Hestia.Contracts.Finance;
 using Hestia.Platform.Events;
+using Hestia.Platform.Finance;
 using Hestia.Platform.Modules;
 using JasperFx;
 using Microsoft.Extensions.Options;
@@ -84,6 +85,11 @@ internal sealed class HestiaEventsSetup(IConfiguration configuration, IReadOnlyL
             wolverine.Discovery.IncludeAssembly(assembly);
         }
 
+        // The shared finance client is a typed HttpClient: a lambda registration that Wolverine cannot build in its
+        // generated code. Wolverine 6 refuses service location by default, so a consumer that takes IFinanceClient
+        // (with AsSystem, T42) would fail. Allow it for this one service.
+        wolverine.CodeGeneration.AlwaysUseServiceLocationFor<IFinanceClient>();
+
         // Always registered, and quiet unless LogAll is on: the setting can change without a restart, and the set of
         // consumers does not depend on it.
         foreach (var eventType in HestiaEvents.EventTypes(modules))
@@ -123,9 +129,26 @@ internal sealed class HestiaEventsSetup(IConfiguration configuration, IReadOnlyL
 }
 
 /// <summary>Publishes module events to their in-process consumers (Wolverine local queues).</summary>
+/// <remarks>
+/// A consumer has no signed-in user (D7). The publish runs without the execution context of the caller, so the HTTP
+/// request of the change (<c>IHttpContextAccessor</c>) never flows into a consumer. A consumer then sees no request,
+/// and can use the system finance client (<c>IFinanceClient.AsSystem</c>, T42), as a consumer of a finance event can.
+/// </remarks>
 internal sealed class WolverineEventPublisher(IMessageBus bus) : IEventPublisher
 {
-    public ValueTask PublishAsync(object @event, CancellationToken cancellationToken = default) => bus.PublishAsync(@event);
+    public ValueTask PublishAsync(object @event, CancellationToken cancellationToken = default)
+    {
+        if (ExecutionContext.IsFlowSuppressed())
+        {
+            return bus.PublishAsync(@event);
+        }
+        Task publish;
+        using (ExecutionContext.SuppressFlow())
+        {
+            publish = Task.Run(() => bus.PublishAsync(@event).AsTask(), CancellationToken.None);
+        }
+        return new ValueTask(publish);
+    }
 }
 
 /// <summary>

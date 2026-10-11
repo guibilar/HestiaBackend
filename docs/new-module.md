@@ -30,6 +30,9 @@ Replace `Documents` and `documents` with the name of your module.
   search with its criteria in the body), add `.ReadOnlyQuery()` (`Hestia.Platform.Auth`).
 - To read finance data, use `IFinanceClient` (`Hestia.Platform.Finance`). Do not call the host's own proxy, and do not
   read the finance database.
+- In background code (a consumer, a timer, a host command), there is no user. Use
+  `finance.AsSystem("<Module>.<Class>")`: read-only by default. For a write, pass `FinanceAccess.Full` on purpose.
+  Never call `AsSystem` from an endpoint: the client refuses it inside an HTTP request.
 
 The architecture tests check these rules. If a test fails, change the code, not the test.
 
