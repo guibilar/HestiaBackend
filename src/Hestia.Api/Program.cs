@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Hestia.Api.Events;
 using Hestia.Api.Gateway;
 using Hestia.Platform.Errors;
 using Hestia.Platform.Health;
@@ -21,6 +22,8 @@ builder.Services.AddFinanceProxy(builder.Configuration);
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 builder.Services.AddSingleton(TimeProvider.System);
+// Events (D7): module events in process after commit, and finance events from RabbitMQ (Events section).
+builder.AddHestiaEvents(modules);
 
 foreach (var module in modules)
 {

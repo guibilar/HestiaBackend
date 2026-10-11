@@ -1,6 +1,21 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Contracts shared with other processes (finance events in T04, Today cards in T08).
-       T04 publishes this project as a NuGet package. Keep it free of ASP.NET Core and EF Core. -->
+  <!-- Contracts shared with other processes: the finance events (T04) and, later, the Today cards (T08).
+       CI publishes this project as a NuGet package to GitHub Packages, for the finance backend.
+       Keep it free of ASP.NET Core, EF Core, and messaging packages: the architecture tests check this. -->
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <PackageId>Hestia.Contracts</PackageId>
+    <!-- Change the version when a contract changes. CI publishes it from main once (see the README).
+         A pull request publishes a prerelease of it (1.0.0-pr.<number>.<run>) when it changes this project. -->
+    <VersionPrefix>1.0.0</VersionPrefix>
+    <Authors>guibilar</Authors>
+    <Description>Event and DTO contracts that Hestia shares with other services, for example the finance events.</Description>
+    <RepositoryUrl>https://github.com/guibilar/HestiaBackend</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <!-- The XML comments go into the package, so the finance code sees them. Not every member has one. -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
 
 </Project>

@@ -8,6 +8,10 @@
     </PackageReference>
     <!-- The finance proxy (Gateway/FinanceProxy.cs). -->
     <PackageReference Include="Yarp.ReverseProxy" />
+    <!-- Events: in-process module events and the finance events from RabbitMQ (Events/HestiaEvents.cs). -->
+    <PackageReference Include="WolverineFx" />
+    <PackageReference Include="WolverineFx.RabbitMQ" />
+    <PackageReference Include="WolverineFx.RuntimeCompilation" />
   </ItemGroup>
 
   <ItemGroup>

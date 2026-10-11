@@ -60,7 +60,20 @@ dotnet test
 HESTIA_TEST_POSTGRES=container dotnet test
 ```
 
-## 6. Check
+## 6. Events (when the module has them)
+
+A module event tells other modules that something changed (D7). See the README, section "Events".
+
+1. Put the event in the `.Contracts` project: a `sealed record` that implements `IIntegrationEvent`, with
+   `public int Version { get; init; } = 1;`. Example: `SampleItemCreated`.
+2. Raise it on the module's DbContext before the save: `db.RaiseEvent(new DocumentAdded(...))`. The host publishes it
+   after the commit, and never when the save fails or the transaction rolls back.
+3. Consume an event (from your module, another module, or finance) with a public class whose name ends in `Consumer`,
+   with a public `Consume(TEvent message)` method. Example: `SampleItemCreatedConsumer`. Make it idempotent: an event can
+   come more than once.
+4. In tests, each `HestiaApiFactory` records what the consumers get: `await factory.Events.WaitForAsync<DocumentAdded>()`.
+
+## 7. Check
 
 - `dotnet build` has no warnings.
 - `dotnet test` passes, with the architecture tests.
