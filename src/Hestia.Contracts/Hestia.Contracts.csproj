@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Contracts shared with other processes (finance events in T04, Today cards in T08).
+       T04 publishes this project as a NuGet package. Keep it free of ASP.NET Core and EF Core. -->
+
+</Project>

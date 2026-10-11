@@ -1,0 +1,19 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Hestia.Api/Hestia.Api.csproj" />
+    <Project Path="src/Hestia.Contracts/Hestia.Contracts.csproj" />
+    <Project Path="src/Hestia.Platform/Hestia.Platform.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/" />
+  <Folder Name="/src/Modules/Sample/">
+    <Project Path="src/Modules/Sample/Hestia.Modules.Sample/Hestia.Modules.Sample.csproj" />
+    <Project Path="src/Modules/Sample/Hestia.Modules.Sample.Contracts/Hestia.Modules.Sample.Contracts.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Hestia.Api.Tests/Hestia.Api.Tests.csproj" />
+    <Project Path="tests/Hestia.Architecture.Tests/Hestia.Architecture.Tests.csproj" />
+    <Project Path="tests/Hestia.Modules.Sample.Tests/Hestia.Modules.Sample.Tests.csproj" />
+    <Project Path="tests/Hestia.Platform.Tests/Hestia.Platform.Tests.csproj" />
+    <Project Path="tests/Hestia.Testing/Hestia.Testing.csproj" />
+  </Folder>
+</Solution>

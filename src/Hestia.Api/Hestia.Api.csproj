@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <!-- Needed at design time for `dotnet ef` (startup project). -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Hestia.Platform\Hestia.Platform.csproj" />
+    <ProjectReference Include="..\Hestia.Contracts\Hestia.Contracts.csproj" />
+  </ItemGroup>
+
+  <!-- The modules. The host finds them at start (ModuleLoader); a reference here is all it needs. -->
+  <ItemGroup Label="Modules">
+    <ProjectReference Include="..\Modules\Sample\Hestia.Modules.Sample\Hestia.Modules.Sample.csproj" />
+  </ItemGroup>
+
+</Project>

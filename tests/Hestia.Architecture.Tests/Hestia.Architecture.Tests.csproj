@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <!-- xUnit v3 test projects are self-running executables (Microsoft Testing Platform). -->
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The host references every module, so all of them are built next to these tests. -->
+    <ProjectReference Include="..\..\src\Hestia.Api\Hestia.Api.csproj" />
+  </ItemGroup>
+
+</Project>

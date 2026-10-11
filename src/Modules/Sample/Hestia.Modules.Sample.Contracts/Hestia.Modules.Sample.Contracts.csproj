@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Public: what other modules may use. It references only Hestia.Platform and Hestia.Contracts. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Hestia.Platform\Hestia.Platform.csproj" />
+  </ItemGroup>
+
+</Project>

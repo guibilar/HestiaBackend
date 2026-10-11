@@ -1,0 +1,65 @@
+# Copy .env.example to .env and set the password before `docker compose up --build`.
+# Start the finance project first: it makes the "finance" network that this project joins.
+
+# Docker keeps container logs forever by default; cap each service at 3 files of 10 MB.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  hestia-api:
+    build: .
+    container_name: hestia-api
+    # Clients reach the host only through the frontend (nginx behind Tailscale HTTPS), over the
+    # "finance" network, as http://hestia-api:8080. The port stays open on this machine alone, for curl and debugging.
+    ports:
+      - "127.0.0.1:5097:8080"
+    networks:
+      - default
+      - finance
+    environment:
+      ConnectionStrings__Hestia: "Host=hestia-db;Port=5432;Database=${POSTGRES_DB:-Hestia};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}"
+      Database__MigrateOnStartup: "true"
+    depends_on:
+      hestia-db:
+        condition: service_healthy
+    restart: unless-stopped
+    logging: *logging
+    # The image has no curl: bash asks /health/live itself (the process answers; no database needed).
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /health/live HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && head -n 1 <&3 | grep -q ' 200 '"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  hestia-db:
+    image: postgres:17
+    container_name: hestia-db
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-Hestia}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    # The finance PostgreSQL uses 127.0.0.1:5432 on the same machine; this one uses 5433.
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - hestia_postgres_data:/var/lib/postgresql/data
+    logging: *logging
+
+networks:
+  # Made by the finance backend's compose project. The database stays on this project's default network only.
+  finance:
+    name: finance
+    external: true
+
+volumes:
+  hestia_postgres_data:
