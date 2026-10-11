@@ -133,7 +133,7 @@ public class ModuleEventTests
         db.RaiseEvent(new SampleItemCreated(duplicate.Id, duplicate.Name, duplicate.CreatedAt));
         await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
 
-        Assert.Empty((await recorder.AfterQuietPeriodAsync<SampleItemCreated>()).Where(e => e.ItemId == duplicate.Id));
+        Assert.DoesNotContain(await recorder.AfterQuietPeriodAsync<SampleItemCreated>(), e => e.ItemId == duplicate.Id);
         Assert.Equal(1, db.UnpublishedEventCount);
 
         // Corrected, the next save includes the event.

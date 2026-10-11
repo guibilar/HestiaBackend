@@ -8,6 +8,11 @@ on:
   schedule:
     - cron: '17 6 * * 1'
 
+# Bash with pipefail, so a command piped into tee still fails its step.
+defaults:
+  run:
+    shell: bash
+
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
