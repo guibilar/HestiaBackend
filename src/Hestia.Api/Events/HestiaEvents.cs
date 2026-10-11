@@ -123,9 +123,26 @@ internal sealed class HestiaEventsSetup(IConfiguration configuration, IReadOnlyL
 }
 
 /// <summary>Publishes module events to their in-process consumers (Wolverine local queues).</summary>
+/// <remarks>
+/// A consumer has no signed-in user (D7). The publish runs without the execution context of the caller, so the HTTP
+/// request of the change (<c>IHttpContextAccessor</c>) never flows into a consumer. A consumer then sees no request,
+/// and can use the system finance client (<c>IFinanceClient.AsSystem</c>, T42), as a consumer of a finance event can.
+/// </remarks>
 internal sealed class WolverineEventPublisher(IMessageBus bus) : IEventPublisher
 {
-    public ValueTask PublishAsync(object @event, CancellationToken cancellationToken = default) => bus.PublishAsync(@event);
+    public ValueTask PublishAsync(object @event, CancellationToken cancellationToken = default)
+    {
+        if (ExecutionContext.IsFlowSuppressed())
+        {
+            return bus.PublishAsync(@event);
+        }
+        Task publish;
+        using (ExecutionContext.SuppressFlow())
+        {
+            publish = Task.Run(() => bus.PublishAsync(@event).AsTask(), CancellationToken.None);
+        }
+        return new ValueTask(publish);
+    }
 }
 
 /// <summary>
