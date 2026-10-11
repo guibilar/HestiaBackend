@@ -57,7 +57,7 @@ jobs:
         run: >
           docker run -d --name personal-finance-api --network finance
           -v "$PWD/docker/ci/finance-stub.conf:/etc/nginx/conf.d/default.conf:ro" nginx:alpine
-      - name: Build and start the stack (host + PostgreSQL, as deployed)
+      - name: Build and start the stack (host, PostgreSQL, and backup, as deployed)
         run: docker compose up -d --build --wait
       - name: /health/ready answers 200 (the databases and finance answer)
         run: |
@@ -80,6 +80,9 @@ jobs:
           echo "$body" | jq -e 'has("stub") | not'
       - name: The host runs as a non-root user
         run: test "$(docker exec hestia-api id -u)" != 0
+      # T24: the backup container wrote a dump at start; a new dump restores into an empty database and with docker/restore.sh.
+      - name: Backups (backup.sh) restore, with the sample schema and its data
+        run: docker/ci/backup-restore-check.sh http://localhost:5097
       - name: Container logs
         if: failure()
         run: |
