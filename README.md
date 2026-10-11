@@ -156,7 +156,7 @@ dotnet ef migrations add <Name> \
 
 ## Docker
 
-`docker-compose.yml` starts the host (`hestia-api`) and its PostgreSQL (`hestia-db`, database `Hestia`).
+`docker-compose.yml` starts the host (`hestia-api`), its PostgreSQL (`hestia-db`, database `Hestia`), and the `backup` service ([Backups](#backups)).
 The host joins the external network `finance`, which the finance backend's compose project makes.
 Start the finance project first. The host reaches finance there as `http://personal-finance-api:8080`.
 
@@ -171,3 +171,55 @@ restart the frontend (`docker compose up -d`). To go back, remove the line: ngin
 
 CI does the same with a small nginx stand-in for finance (`docker/ci/finance-stub.conf`). It checks that a finance path
 reaches finance with its query string, `Host`, cookies, and `X-Forwarded-Proto`, and that a module path stays in the host.
+
+### Backups
+
+The `backup` service (container `hestia-backup`) dumps the `Hestia` database when the stack starts, and then every
+night at `BACKUP_AT` (03:00, Toronto time, `TZ`). The dumps contain all module schemas. They use `pg_dump` 17, from the
+same image as the database, in the custom format of `pg_restore`.
+
+**Where the backup files are:** in the Docker volume `hestia_backups`, as `hestia-<date>_<time>.dump`.
+
+- `docker compose exec backup ls -l /backups` lists them.
+- `docker volume inspect hestia_backups` shows the folder on this machine (usually `/var/lib/docker/volumes/hestia_backups/_data`, readable by root only).
+- `docker compose cp backup:/backups/hestia-2026-10-11_030000.dump .` copies one dump out of the volume.
+
+Dumps older than `BACKUP_KEEP_DAYS` (14) are deleted after each successful dump. The files have mode 600 and belong to
+the image's `postgres` user (uid 999). When the newest dump is older than 26 hours, `docker compose ps` shows the
+container as unhealthy. `docker compose logs backup` tells you why.
+
+To keep the dumps in a folder on this machine, not in the volume, set `BACKUP_DIR=./backups` in `.env`. Also set
+`BACKUP_UID` and `BACKUP_GID` to your user (`id -u` and `id -g`), so the dumps belong to you.
+
+**The dumps are sensitive.** Each dump is the whole database. After T03, it also holds the password hash and the
+session data. A backup on the same disk does not survive a disk failure. Copy the dumps to a different place, and
+encrypt the copy. The finance backend README shows a way with `age`.
+
+```bash
+docker compose exec backup backup.sh once      # make an extra dump now
+```
+
+#### Restore a backup
+
+`docker/restore.sh` replaces the current database with a dump. All data since that dump is lost.
+
+1. Go to the directory with `docker-compose.yml`. The stack must run (`docker compose up -d`).
+2. Find the dump: `docker compose exec backup ls -l /backups`.
+3. Run `docker/restore.sh hestia-2026-10-11_030000.dump` (a file name in the volume).
+   For a dump on this machine (for example a decrypted copy), give its path: `docker/restore.sh ~/hestia.dump`.
+4. Wait for `Restored ...`. Then check the host: `curl http://localhost:5097/health/ready`.
+
+The script does these steps:
+
+1. It saves the current database as `before-restore-<time>.dump` in the volume. The nightly clean-up does not
+   delete these files. Delete them yourself when you do not need them.
+2. It stops `hestia-api`.
+3. It drops all schemas of the database, and restores the dump, in one transaction. If a step fails, the database
+   stays as it was.
+4. It starts `hestia-api` again. The host applies the migrations that are newer than the dump.
+
+To undo a restore, restore the `before-restore-<time>.dump` file in the same way.
+
+CI checks the backups in the Docker job (`docker/ci/backup-restore-check.sh`). It adds a Sample item, makes a dump,
+restores the dump into an empty database, and checks the `sample` schema and the item. Then it runs `docker/restore.sh`
+with a dump from the volume and with a file on the runner.
