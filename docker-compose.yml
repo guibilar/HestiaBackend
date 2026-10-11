@@ -24,6 +24,8 @@ services:
       Database__MigrateOnStartup: "true"
       # The finance backend (T02: the host proxies the finance paths to it). Its container name on "finance".
       FinanceProxy__Address: ${FINANCE_API_URL:-http://personal-finance-api:8080}
+      # T08: which day it is for Today. Use the same zone as finance (its Reports:TimeZone), so "this month" matches.
+      Today__TimeZone: ${TZ:-America/Toronto}
       # T04: the RabbitMQ broker of the finance project (on "finance"), for the finance events. Empty: no finance events.
       Events__RabbitMq: ${EVENTS_RABBITMQ_URL:-}
       # T04: a debug consumer logs every event. For a check, not for every day.

@@ -83,7 +83,22 @@ A module event tells other modules that something changed (D7). See the README, 
    come more than once.
 4. In tests, each `HestiaApiFactory` records what the consumers get: `await factory.Events.WaitForAsync<DocumentAdded>()`.
 
-## 7. Check
+## 7. Cards on Today (when the module has them)
+
+The Today screen shows cards from all modules (T08, see the README, section "Today").
+
+1. In the internal `.csproj`, add a `ProjectReference` to `Hestia.Modules.Today.Contracts`.
+2. Add a class that implements `ITodayCardProvider`: `Module` is your module name, `Order` is 100 or more (Money is 0).
+   Return `TodayCard` items: `Type` is `Tile` (a headline number) or `Attention` (a "Needs attention" item). Use your
+   module name in `Module`, and start each `Id` with the lower-case module name, for example `documents.expiring.<id>`.
+3. Do not format amounts or dates in a text. Put a placeholder in the text (`{amount}`) and its value in `Values`
+   (`TodayValue.Money(...)`, `TodayValue.Day(...)`): the clients format them.
+4. Register it in `AddServices`: `services.AddScoped<ITodayCardProvider, DocumentsTodayCards>();`.
+5. The provider runs inside the request of the user. A provider that throws gives no cards, and Today shows the other
+   modules. If only a part of your data loads, return the cards that you have with `Complete: false`.
+6. Test it through `GET /api/today` with `HestiaApiFactory`.
+
+## 8. Check
 
 - `dotnet build` has no warnings.
 - `dotnet test` passes, with the architecture tests.

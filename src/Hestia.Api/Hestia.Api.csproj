@@ -6,6 +6,8 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+    <!-- The OpenAPI document of the module endpoints, at /openapi/v1.json (T08). -->
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
     <!-- The finance proxy (Gateway/FinanceProxy.cs). -->
     <PackageReference Include="Yarp.ReverseProxy" />
     <!-- Events: in-process module events and the finance events from RabbitMQ (Events/HestiaEvents.cs). -->
@@ -23,6 +25,7 @@
   <ItemGroup Label="Modules">
     <ProjectReference Include="..\Modules\Identity\Hestia.Modules.Identity\Hestia.Modules.Identity.csproj" />
     <ProjectReference Include="..\Modules\Sample\Hestia.Modules.Sample\Hestia.Modules.Sample.csproj" />
+    <ProjectReference Include="..\Modules\Today\Hestia.Modules.Today\Hestia.Modules.Today.csproj" />
   </ItemGroup>
 
 </Project>

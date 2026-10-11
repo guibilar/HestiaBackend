@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Public: the Today card contract and ITodayCardProvider. Each module that shows cards on Today references this
+       project and registers a provider. It references only Hestia.Platform and Hestia.Contracts. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Hestia.Platform\Hestia.Platform.csproj" />
+  </ItemGroup>
+
+</Project>

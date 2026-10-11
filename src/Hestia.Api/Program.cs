@@ -23,6 +23,9 @@ builder.Services.AddFinanceProxy(builder.Configuration);
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 builder.Services.AddSingleton(TimeProvider.System);
+// T08: the OpenAPI document of the module endpoints (/openapi/v1.json), for the web and Android clients.
+// The finance paths are not in it: finance has its own API description.
+builder.Services.AddOpenApi();
 // Events (D7): module events in process after commit, and finance events from RabbitMQ (Events section).
 builder.AddHestiaEvents(modules);
 
@@ -73,6 +76,9 @@ foreach (var module in modules)
 {
     module.MapEndpoints(app);
 }
+
+// Needs a signed-in user, as every endpoint (a session cookie, or the read-only token).
+app.MapOpenApi();
 
 // After the modules. The finance routes have a lower priority, so a module endpoint on the same path wins.
 app.MapFinanceProxy();
