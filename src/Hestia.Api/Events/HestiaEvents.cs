@@ -2,6 +2,7 @@ using System.Reflection;
 using Hestia.Contracts;
 using Hestia.Contracts.Finance;
 using Hestia.Platform.Events;
+using Hestia.Platform.Finance;
 using Hestia.Platform.Modules;
 using JasperFx;
 using Microsoft.Extensions.Options;
@@ -83,6 +84,11 @@ internal sealed class HestiaEventsSetup(IConfiguration configuration, IReadOnlyL
         {
             wolverine.Discovery.IncludeAssembly(assembly);
         }
+
+        // The shared finance client is a typed HttpClient: a lambda registration that Wolverine cannot build in its
+        // generated code. Wolverine 6 refuses service location by default, so a consumer that takes IFinanceClient
+        // (with AsSystem, T42) would fail. Allow it for this one service.
+        wolverine.CodeGeneration.AlwaysUseServiceLocationFor<IFinanceClient>();
 
         // Always registered, and quiet unless LogAll is on: the setting can change without a restart, and the set of
         // consumers does not depend on it.
