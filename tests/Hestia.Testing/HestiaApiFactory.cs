@@ -1,6 +1,8 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Hestia.Api.Events;
+using Hestia.Platform.Modules;
 using Hestia.Platform.Persistence;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -11,6 +13,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Npgsql;
+using Wolverine;
 
 namespace Hestia.Testing;
 
@@ -25,6 +28,9 @@ public class HestiaApiFactory(
     private readonly string _databaseName = $"hestia_test_{Guid.NewGuid():N}";
     private readonly InMemoryDatabaseRoot _inMemoryRoot = new();
     private bool _createdDatabase;
+
+    /// <summary>The events that reached the host's consumers (all event types are recorded).</summary>
+    public EventRecorder Events => Services.GetRequiredService<EventRecorder>();
 
     public static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
     {
@@ -51,6 +57,8 @@ public class HestiaApiFactory(
 
         builder.ConfigureTestServices(services =>
         {
+            services.AddSingleton<EventRecorder>();
+            services.AddSingleton<IWolverineExtension>(new RecordEvents(HestiaEvents.EventTypes(ModuleLoader.Discover())));
             if (TestDatabase.PostgresServer is null)
             {
                 services.RemoveAll<IDatabaseOptionsConfigurator>();

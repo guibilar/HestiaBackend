@@ -1,12 +1,11 @@
 using System.Collections.Concurrent;
-using Microsoft.Extensions.DependencyInjection;
 using Wolverine;
 
 namespace Hestia.Testing;
 
 /// <summary>
-/// Records the events that reach the host's consumers. <see cref="RecordEvents"/> adds one consumer per event type,
-/// like a module consumer, so a test sees what a real consumer receives.
+/// Records the events that reach the host's consumers (<see cref="HestiaApiFactory.Events"/>). <see cref="RecordEvents"/>
+/// adds one consumer per event type, like a module consumer, so a test sees what a real consumer receives.
 /// </summary>
 public sealed class EventRecorder
 {
@@ -58,7 +57,11 @@ public sealed class RecordingConsumer<TEvent>(EventRecorder recorder) where TEve
     public void Consume(TEvent message) => recorder.Record(message);
 }
 
-/// <summary>Adds a <see cref="RecordingConsumer{TEvent}"/> for each event type to the host's Wolverine setup.</summary>
+/// <summary>
+/// Adds a <see cref="RecordingConsumer{TEvent}"/> for each event type to the host's Wolverine setup.
+/// <see cref="HestiaApiFactory"/> adds it to every test host, for every event type: Wolverine reuses the code that it
+/// compiled for a message type in one process, so all hosts of a test run must have the same consumers.
+/// </summary>
 public sealed class RecordEvents(IReadOnlyList<Type> eventTypes) : IWolverineExtension
 {
     public void Configure(WolverineOptions options)
@@ -67,17 +70,5 @@ public sealed class RecordEvents(IReadOnlyList<Type> eventTypes) : IWolverineExt
         {
             options.Discovery.IncludeType(typeof(RecordingConsumer<>).MakeGenericType(eventType));
         }
-    }
-}
-
-public static class EventRecorderServiceCollectionExtensions
-{
-    /// <summary>Records the events of these types in the host (for <see cref="HestiaApiFactory"/>'s configureServices).</summary>
-    public static IServiceCollection AddEventRecorder(this IServiceCollection services, EventRecorder recorder,
-        params Type[] eventTypes)
-    {
-        services.AddSingleton(recorder);
-        services.AddSingleton<IWolverineExtension>(new RecordEvents(eventTypes));
-        return services;
     }
 }

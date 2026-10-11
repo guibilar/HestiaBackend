@@ -18,10 +18,7 @@ public class FinanceEventTests
     public async Task FinanceEvents_FromRabbitMq_ReachTheHostConsumers()
     {
         Assert.SkipUnless(TestRabbitMq.Available, $"Needs RabbitMQ: set {TestRabbitMq.Variable}.");
-        var recorder = new EventRecorder();
-        await using var host = new HestiaApiFactory(
-            new Dictionary<string, string?> { ["Events:RabbitMq"] = TestRabbitMq.Address },
-            services => services.AddEventRecorder(recorder, [.. FinanceEventTopology.EventTypes]));
+        await using var host = new HestiaApiFactory(new Dictionary<string, string?> { ["Events:RabbitMq"] = TestRabbitMq.Address });
         // Starts the host: it declares the exchange, its queue, and the binding.
         host.CreateClient();
         using var finance = await StartFinanceStandInAsync();
@@ -38,11 +35,11 @@ public class FinanceEventTests
             DateTimeOffset.UtcNow);
         await PublishAsync(finance, imported, changed, budget, balance, price);
 
-        Assert.Equal(imported, await recorder.WaitForAsync<TransactionsImported>());
-        Assert.Equal(changed, await recorder.WaitForAsync<TransactionChanged>());
-        Assert.Equal(budget, await recorder.WaitForAsync<BudgetLimitReached>());
-        Assert.Equal(balance, await recorder.WaitForAsync<BalanceRecorded>());
-        Assert.Equal(price, await recorder.WaitForAsync<SubscriptionPriceChanged>());
+        Assert.Equal(imported, await host.Events.WaitForAsync<TransactionsImported>());
+        Assert.Equal(changed, await host.Events.WaitForAsync<TransactionChanged>());
+        Assert.Equal(budget, await host.Events.WaitForAsync<BudgetLimitReached>());
+        Assert.Equal(balance, await host.Events.WaitForAsync<BalanceRecorded>());
+        Assert.Equal(price, await host.Events.WaitForAsync<SubscriptionPriceChanged>());
     }
 
     [Fact]

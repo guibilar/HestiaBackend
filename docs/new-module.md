@@ -71,8 +71,7 @@ A module event tells other modules that something changed (D7). See the README, 
 3. Consume an event (from your module, another module, or finance) with a public class whose name ends in `Consumer`,
    with a public `Consume(TEvent message)` method. Example: `SampleItemCreatedConsumer`. Make it idempotent: an event can
    come more than once.
-4. In tests, `services.AddEventRecorder(recorder, typeof(DocumentAdded))` (in `tests/Hestia.Testing`) records what the
-   consumers get. Use `recorder.WaitForAsync<DocumentAdded>()`.
+4. In tests, each `HestiaApiFactory` records what the consumers get: `await factory.Events.WaitForAsync<DocumentAdded>()`.
 
 ## 7. Check
 

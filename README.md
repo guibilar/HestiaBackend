@@ -170,7 +170,7 @@ Settings (section `Events`):
 | Setting | Default | Description |
 | --- | --- | --- |
 | `RabbitMq` | empty | The broker, for example `amqp://hestia:secret@rabbitmq:5672`. Docker: `EVENTS_RABBITMQ_URL` in `.env`. Empty: no finance events; the module events still work. |
-| `LogAll` | `false` (`true` in Development) | A debug consumer logs every event (finance and module events) with all its values. Docker: `EVENTS_LOG_ALL`. |
+| `LogAll` | `false` (`true` in Development) | A debug consumer logs every event (finance and module events) with all its values. The host reads it for each event. Docker: `EVENTS_LOG_ALL`. |
 
 The broker runs in the finance project (its `events` profile), on the network `finance`. If the broker is down when the
 host starts, the host starts without the finance events and logs an error: restart the host when the broker is back.
@@ -199,7 +199,7 @@ HESTIA_TEST_POSTGRES=container HESTIA_TEST_RABBITMQ=container dotnet test   # Po
 `HESTIA_TEST_POSTGRES` can also be the connection string of a PostgreSQL server that you run yourself.
 Each test host gets its own database, and the tests delete it at the end. `HESTIA_TEST_RABBITMQ` can also be the
 `amqp://` address of a broker that you run yourself. Without it, the RabbitMQ tests are skipped.
-`EventRecorder` (in `tests/Hestia.Testing`) adds a recording consumer to a test host, for any event type.
+Each `HestiaApiFactory` records the events that reach its consumers, for every event type (`factory.Events`).
 
 CI also runs these checks:
 

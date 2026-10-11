@@ -4,6 +4,7 @@ using Hestia.Contracts.Finance;
 using Hestia.Platform.Events;
 using Hestia.Platform.Modules;
 using JasperFx;
+using Microsoft.Extensions.Options;
 using Wolverine;
 using Wolverine.RabbitMQ;
 
@@ -20,7 +21,10 @@ public sealed class EventsOptions
     /// </summary>
     public string? RabbitMq { get; set; }
 
-    /// <summary>A debug consumer logs every event (finance and module events) at Information level.</summary>
+    /// <summary>
+    /// A debug consumer logs every event (finance and module events) at Information level. The host reads it for each
+    /// event, so a change in appsettings.json takes effect without a restart.
+    /// </summary>
     public bool LogAll { get; set; }
 }
 
@@ -39,6 +43,7 @@ public static class HestiaEvents
 {
     public static WebApplicationBuilder AddHestiaEvents(this WebApplicationBuilder builder, IReadOnlyList<IModule> modules)
     {
+        builder.Services.AddOptions<EventsOptions>().BindConfiguration(EventsOptions.SectionName);
         // Before the modules register their DbContexts: the platform keeps this one (TryAdd).
         builder.Services.AddScoped<IEventPublisher, WolverineEventPublisher>();
         // The setup reads the Events settings when the host starts (an extension from the container), so it sees the
@@ -79,12 +84,10 @@ internal sealed class HestiaEventsSetup(IConfiguration configuration, IReadOnlyL
             wolverine.Discovery.IncludeAssembly(assembly);
         }
 
-        if (options.LogAll)
+        // Always registered, and quiet unless LogAll is on: so the set of handlers does not depend on a setting.
+        foreach (var eventType in HestiaEvents.EventTypes(modules))
         {
-            foreach (var eventType in HestiaEvents.EventTypes(modules))
-            {
-                wolverine.Discovery.IncludeType(typeof(EventLog<>).MakeGenericType(eventType));
-            }
+            wolverine.Discovery.IncludeType(typeof(EventLog<>).MakeGenericType(eventType));
         }
 
         if (!string.IsNullOrWhiteSpace(options.RabbitMq))
@@ -125,10 +128,16 @@ internal sealed class WolverineEventPublisher(IMessageBus bus) : IEventPublisher
 }
 
 /// <summary>
-/// The debug consumer (<c>Events:LogAll</c>): one handler per event type, which logs the event with all its values.
-/// The host adds it only when the setting is on. It is a consumer like any other, so it shows what consumers receive.
+/// The debug consumer (<c>Events:LogAll</c>): one handler per event type, which logs the event with all its values when
+/// the setting is on. It is a consumer like any other, so it shows what consumers receive.
 /// </summary>
-public sealed class EventLog<TEvent>(ILogger<EventLog<TEvent>> logger) where TEvent : class
+public sealed class EventLog<TEvent>(IOptionsMonitor<EventsOptions> options, ILogger<EventLog<TEvent>> logger) where TEvent : class
 {
-    public void Consume(TEvent message) => logger.LogInformation("Event received: {Event}", message);
+    public void Consume(TEvent message)
+    {
+        if (options.CurrentValue.LogAll)
+        {
+            logger.LogInformation("Event received: {Event}", message);
+        }
+    }
 }

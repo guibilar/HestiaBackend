@@ -25,12 +25,12 @@ public class ModuleEventTests
     [Fact]
     public async Task ModuleEvent_ReachesItsConsumers_AfterTheSave()
     {
-        await using var factory = RecordingHost(out var recorder);
+        await using var factory = new HestiaApiFactory();
         var client = factory.CreateClient();
 
         var created = await (await client.PostAsJsonAsync(Items, new CreateSampleItemRequest("Kettle"))).ReadAsync<SampleItemDto>();
 
-        var received = await recorder.WaitForAsync<SampleItemCreated>();
+        var received = await factory.Events.WaitForAsync<SampleItemCreated>();
         Assert.Equal(created.Id, received.ItemId);
         Assert.Equal("Kettle", received.Name);
         Assert.Equal(created.CreatedAt, received.OccurredAt);
@@ -54,7 +54,7 @@ public class ModuleEventTests
     [Fact]
     public async Task ModuleEvent_WithoutASave_IsNotPublished()
     {
-        await using var factory = RecordingHost(out var recorder);
+        await using var factory = new HestiaApiFactory();
         factory.CreateClient();
 
         await using (var scope = factory.Services.CreateAsyncScope())
@@ -64,14 +64,14 @@ public class ModuleEventTests
             Assert.Equal(1, db.UnpublishedEventCount);
         }
 
-        Assert.Empty(await recorder.AfterQuietPeriodAsync<SampleItemCreated>());
+        Assert.Empty(await factory.Events.AfterQuietPeriodAsync<SampleItemCreated>());
     }
 
     [Fact]
     public async Task ModuleEvent_InATransaction_IsPublishedOnlyAfterTheCommit()
     {
         Assert.SkipUnless(TestDatabase.OnPostgres, $"Needs PostgreSQL: set {TestDatabase.Variable}.");
-        await using var factory = RecordingHost(out var recorder);
+        await using var factory = new HestiaApiFactory();
         factory.CreateClient();
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<SampleDbContext>();
@@ -84,13 +84,13 @@ public class ModuleEventTests
             created = await service.CreateAsync(new CreateSampleItemRequest("Kettle"), CancellationToken.None);
 
             // Saved, not committed: no consumer has it yet.
-            Assert.Empty(await recorder.AfterQuietPeriodAsync<SampleItemCreated>());
+            Assert.Empty(await factory.Events.AfterQuietPeriodAsync<SampleItemCreated>());
             Assert.Equal(1, db.UnpublishedEventCount);
 
             await transaction.CommitAsync();
         });
 
-        var received = await recorder.WaitForAsync<SampleItemCreated>();
+        var received = await factory.Events.WaitForAsync<SampleItemCreated>();
         Assert.Equal(created!.Id, received.ItemId);
         Assert.Equal(0, db.UnpublishedEventCount);
     }
@@ -99,7 +99,7 @@ public class ModuleEventTests
     public async Task ModuleEvent_InATransactionThatRollsBack_IsNeverPublished()
     {
         Assert.SkipUnless(TestDatabase.OnPostgres, $"Needs PostgreSQL: set {TestDatabase.Variable}.");
-        await using var factory = RecordingHost(out var recorder);
+        await using var factory = new HestiaApiFactory();
         factory.CreateClient();
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<SampleDbContext>();
@@ -112,7 +112,7 @@ public class ModuleEventTests
             await transaction.RollbackAsync();
         });
 
-        Assert.Empty(await recorder.AfterQuietPeriodAsync<SampleItemCreated>());
+        Assert.Empty(await factory.Events.AfterQuietPeriodAsync<SampleItemCreated>());
         Assert.Equal(0, db.UnpublishedEventCount);
     }
 
@@ -120,10 +120,10 @@ public class ModuleEventTests
     public async Task ModuleEvent_OfAFailedSave_IsNotPublished_AndStaysForTheNextSave()
     {
         Assert.SkipUnless(TestDatabase.OnPostgres, $"Needs PostgreSQL: set {TestDatabase.Variable}.");
-        await using var factory = RecordingHost(out var recorder);
+        await using var factory = new HestiaApiFactory();
         var client = factory.CreateClient();
         await client.PostAsJsonAsync(Items, new CreateSampleItemRequest("Kettle"));
-        await recorder.WaitForAsync<SampleItemCreated>();
+        await factory.Events.WaitForAsync<SampleItemCreated>();
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<SampleDbContext>();
 
@@ -133,13 +133,13 @@ public class ModuleEventTests
         db.RaiseEvent(new SampleItemCreated(duplicate.Id, duplicate.Name, duplicate.CreatedAt));
         await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
 
-        Assert.DoesNotContain(await recorder.AfterQuietPeriodAsync<SampleItemCreated>(), e => e.ItemId == duplicate.Id);
+        Assert.DoesNotContain(await factory.Events.AfterQuietPeriodAsync<SampleItemCreated>(), e => e.ItemId == duplicate.Id);
         Assert.Equal(1, db.UnpublishedEventCount);
 
         // Corrected, the next save includes the event.
         duplicate.Name = "Kettle 2";
         await db.SaveChangesAsync();
-        await recorder.WaitForAsync<SampleItemCreated>(e => e.ItemId == duplicate.Id);
+        await factory.Events.WaitForAsync<SampleItemCreated>(e => e.ItemId == duplicate.Id);
     }
 
     [Fact]
@@ -178,13 +178,6 @@ public class ModuleEventTests
         await Eventually(async () => await client.GetFromJsonAsync<SampleActivityDto>("/api/sample/activity"), dto => dto?.ItemsCreated == 1);
 
         Assert.Null(logs.Find("Event received:"));
-    }
-
-    private static HestiaApiFactory RecordingHost(out EventRecorder recorder)
-    {
-        var events = new EventRecorder();
-        recorder = events;
-        return new HestiaApiFactory(configureServices: services => services.AddEventRecorder(events, typeof(SampleItemCreated)));
     }
 
     private static async Task<T> Eventually<T>(Func<Task<T>> read, Func<T, bool> done)
