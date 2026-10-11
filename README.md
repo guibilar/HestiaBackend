@@ -316,6 +316,28 @@ dotnet format style --verify-no-changes --severity warn
 dotnet tool restore && sh scripts/check-migrations.sh       # after dotnet build
 ```
 
+### Test results as annotations
+
+The two CI test steps write TRX files (`--report-xunit-trx`, from xUnit v3, with no extra package).
+After each test step, `scripts/test-annotations.py` reads them and writes annotations on the run:
+
+- one notice per test project, with the totals, for example
+  `Tests (in-memory): Hestia.Api.Tests — 120 passed, 0 failed, 2 skipped`;
+- one error per failed test, with the test name, the test project, and the first six lines of the message;
+- a warning if a test step wrote no TRX file (for example, a crash before the results).
+
+The labels are `in-memory` and `postgres`. The step also runs when the tests fail.
+GitHub shows at most 10 errors per step. After 9 failed tests, one more error gives the count of the others.
+Task sessions cannot read the CI logs, but they can read these annotations (for example with
+`gh api repos/guibilar/HestiaBackend/check-runs/<id>/annotations`).
+
+To see the same output locally:
+
+```bash
+dotnet test --results-directory TestResults/local --report-xunit-trx
+python3 scripts/test-annotations.py local TestResults/local
+```
+
 ## Migrations
 
 Each module has its own migrations, in `Infrastructure/Migrations` of its internal project:
