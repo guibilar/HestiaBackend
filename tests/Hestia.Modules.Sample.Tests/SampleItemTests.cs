@@ -134,6 +134,7 @@ public class SampleItemTests
         Assert.Contains("Items", tables);
         Assert.Contains("Activity", tables);
         Assert.Contains("EventInbox", tables);
+        Assert.Contains("EventOutbox", tables);
         Assert.Contains("__EFMigrationsHistory", tables);
     }
 }

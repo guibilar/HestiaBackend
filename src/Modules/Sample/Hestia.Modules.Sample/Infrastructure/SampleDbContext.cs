@@ -36,6 +36,9 @@ public class SampleDbContext(DbContextOptions<SampleDbContext> options) : Module
 
         // The inbox of the module's idempotent consumers (T36): the table "EventInbox" in this schema.
         modelBuilder.AddEventInbox();
+        // The outbox for durable events (T38): the table "EventOutbox" in this schema. The module uses it when its
+        // registration calls UseDurableEvents (see SampleModule).
+        modelBuilder.AddEventOutbox();
     }
 }
 

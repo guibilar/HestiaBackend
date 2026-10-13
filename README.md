@@ -305,6 +305,7 @@ an event in the same way on both, and does not know which path it used.
 
 ```
 module A ──RaiseEvent──> DbContext ──SaveChanges / commit──> post-commit dispatcher ──in process──> consumers
+module B (durable) ──RaiseEvent──> DbContext ──same transaction──> outbox table in its schema ──outbox sender──> consumers
 finance ──outbox (same transaction)──> RabbitMQ exchange "hestia.finance-events" ──queue "hestia.api.finance-events"──> consumers
 ```
 
@@ -319,6 +320,37 @@ await db.SaveChangesAsync(cancellationToken);
 The platform (`Hestia.Platform/Events/ModuleEventsInterceptor.cs`) publishes the event only after the change is committed:
 after `SaveChanges`, or, in an explicit transaction, when the transaction commits. A failed save or a rollback publishes
 nothing. This path is not durable: if the process stops between the commit and the publish, the event is lost.
+
+**Durable module events (T38).** A module that must never lose an event opts in when it registers its DbContext, and
+adds the outbox table to its model:
+
+```csharp
+services.AddModuleDbContext<DocumentsDbContext>(DocumentsDbContext.SchemaName, database => database.UseDurableEvents());
+// In OnModelCreating:
+modelBuilder.AddEventOutbox();   // the table "EventOutbox" in the module's schema; then add a migration
+```
+
+The module code does not change: it calls `RaiseEvent` and saves. The save writes each event as a row of the module's
+outbox (`<schema>.EventOutbox`), in the same transaction as the change. A failed save or a rollback stores nothing.
+After the commit, the host's outbox sender (`Hestia.Api/Events/ModuleOutbox.cs`) delivers each row to all consumers of
+the event (Wolverine `InvokeAsync`), and deletes the row when they finished.
+
+- **Never lost after the commit:** a stop before the send keeps the row, and the next start sends it.
+- **At least once:** a stop after the delivery and before the delete sends the event again. The consumers are
+  idempotent (the inbox, below), so the data changes once.
+- **Failures:** a consumer that throws keeps the row. The sender tries again after `RetryDelay`, doubled after each
+  failure (up to 10 minutes). After `MaxAttempts` failures, it stops and keeps the row with its last error
+  (`LastError`), and logs an error. To send the row again, set `Attempts` to 0 in the database.
+- **Order:** the sender sends the rows of a module in the order of the saves. A failed row does not stop the next ones,
+  so a consumer must not depend on the order.
+- A commit wakes the sender at once. It also reads the outboxes every `PollInterval`.
+- Only the event types of the modules' `.Contracts` projects can go to an outbox. Another type fails the save.
+- Each module reads its outbox only with its own DbContext. Module code never uses the outbox rows (the architecture
+  tests check this).
+- The Sample module shows both modes: the setting `Sample:DurableEvents` (default `false`) turns on its outbox.
+
+Wolverine's own EF Core outbox is not used: it needs Wolverine's message storage in the database, with its own schema,
+and does not fit one outbox per module schema. It also does not work with the in-memory test database.
 
 **Finance events (RabbitMQ).** The finance service writes each event to its outbox in the same transaction as the change,
 and sends it to the fanout exchange `hestia.finance-events` after the commit. The host binds its queue
@@ -355,6 +387,10 @@ Settings (section `Events`):
 | --- | --- | --- |
 | `RabbitMq` | empty | The broker, for example `amqp://hestia:secret@rabbitmq:5672`. Docker: `EVENTS_RABBITMQ_URL` in `.env`. Empty: no finance events; the module events still work. |
 | `LogAll` | `false` (`true` in Development) | A debug consumer logs every event (finance and module events) with all its values. The host reads it for each event. Docker: `EVENTS_LOG_ALL`. |
+| `Outbox:Enabled` | `true` | The outbox sender of durable module events. `false` keeps the events in their outbox (for tests and diagnostics). Read at start. |
+| `Outbox:PollInterval` | `00:00:05` | How often the sender reads the outboxes without a commit signal. |
+| `Outbox:RetryDelay` | `00:00:05` | The wait after the first failed delivery of an event. It doubles after each failure, up to 10 minutes (a longer value stays as it is). |
+| `Outbox:MaxAttempts` | `10` | After this many failed deliveries, the sender keeps the row and stops. |
 
 The broker runs in the finance project (its `events` profile), on the network `finance`. If the broker is down when the
 host starts, the host starts without the finance events and logs an error: restart the host when the broker is back.
@@ -384,6 +420,7 @@ HESTIA_TEST_POSTGRES=container HESTIA_TEST_RABBITMQ=container dotnet test   # Po
 Each test host gets its own database, and the tests delete it at the end. `HESTIA_TEST_RABBITMQ` can also be the
 `amqp://` address of a broker that you run yourself. Without it, the RabbitMQ tests are skipped.
 Each `HestiaApiFactory` records the events that reach its consumers, for every event type (`factory.Events`).
+`factory.Restarted(settings)` makes a new host on the same database, to test a restart (T38).
 Each `HestiaApiFactory` signs every request in as a test user with full access (`TestSignIn`), so module tests do not
 sign in. The header `X-Test-Read-Only` makes a request read-only. `new HestiaApiFactory(signedIn: false)` uses the real
 sign-in (see `tests/Hestia.Modules.Identity.Tests`). `FakeFinance` records the requests that reach finance, and

@@ -32,6 +32,27 @@ public class HestiaApiFactory(
     private readonly InMemoryDatabaseRoot _inMemoryRoot = new();
     private bool _createdDatabase;
 
+    /// <summary>A new host on the database of <paramref name="previous"/> (see <see cref="Restarted"/>).</summary>
+    private HestiaApiFactory(HestiaApiFactory previous, IReadOnlyDictionary<string, string?>? newSettings,
+        Action<IServiceCollection>? newServices, bool newSignedIn)
+        : this(newSettings, newServices, newSignedIn)
+    {
+        _databaseName = previous._databaseName;
+        _inMemoryRoot = previous._inMemoryRoot;
+    }
+
+    /// <summary>
+    /// A host restart: a new factory on the same database (in-memory or PostgreSQL), with new settings. Dispose this
+    /// factory first (the old process stops), then use the new one. The new factory deletes the database at its end;
+    /// this one no longer does.
+    /// </summary>
+    public HestiaApiFactory Restarted(IReadOnlyDictionary<string, string?>? settings = null,
+        Action<IServiceCollection>? configureServices = null, bool signedIn = true)
+    {
+        _createdDatabase = false;
+        return new HestiaApiFactory(this, settings, configureServices, signedIn);
+    }
+
     /// <summary>The events that reached the host's consumers (all event types are recorded).</summary>
     public EventRecorder Events => Services.GetRequiredService<EventRecorder>();
 
