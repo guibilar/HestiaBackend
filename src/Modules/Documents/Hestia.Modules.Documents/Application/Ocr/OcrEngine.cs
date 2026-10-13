@@ -31,7 +31,8 @@ public interface IOcrEngine
 /// The OCR with the programs in the host image (D9):
 /// <list type="bullet">
 /// <item>PDF: <c>ocrmypdf --skip-text</c> adds a text layer to the pages that have none (Tesseract), then
-/// <c>pdftotext</c> reads all text, so a PDF with text keeps its own text.</item>
+/// <c>pdftotext -layout</c> reads all text, so a PDF with text keeps its own text. The layout mode keeps the words of a
+/// line together: without it, the OCR layer of some ocrmypdf versions comes out one word per line, in column order.</item>
 /// <item>JPEG, PNG, WebP: <c>tesseract</c>.</item>
 /// <item>HEIC: <c>heif-convert</c> (or <c>heif-dec</c>) makes a PNG first, then <c>tesseract</c>.</item>
 /// </list>
@@ -43,6 +44,9 @@ public sealed partial class CommandLineOcrEngine(IOptions<DocumentsOptions> opti
 
     [GeneratedRegex(@"\n{3,}", RegexOptions.CultureInvariant)]
     private static partial Regex BlankLines();
+
+    [GeneratedRegex(@"[ \t]{2,}", RegexOptions.CultureInvariant)]
+    private static partial Regex Spaces();
 
     public async Task<OcrResult> ExtractTextAsync(string path, string contentType, CancellationToken cancellationToken)
     {
@@ -78,7 +82,7 @@ public sealed partial class CommandLineOcrEngine(IOptions<DocumentsOptions> opti
         var ocr = await RunAsync("ocrmypdf",
             ["--skip-text", "--output-type", "pdf", "--jobs", "1", "--quiet", "-l", Settings.Language, path, output],
             cancellationToken);
-        var text = await RunAsync("pdftotext", ["-enc", "UTF-8", ocr.Succeeded ? output : path, "-"], cancellationToken);
+        var text = await RunAsync("pdftotext", ["-layout", "-enc", "UTF-8", ocr.Succeeded ? output : path, "-"], cancellationToken);
         if (ocr.Succeeded)
         {
             return text.Succeeded ? OcrResult.Succeeded(Clean(text.Output)) : OcrResult.Failed(Describe("pdftotext", text));
@@ -134,12 +138,15 @@ public sealed partial class CommandLineOcrEngine(IOptions<DocumentsOptions> opti
         return error.Length == 0 ? $"{program} failed (exit code {result.ExitCode})." : $"{program} failed (exit code {result.ExitCode}): {error}";
     }
 
-    /// <summary>The text with Unix line ends, no page breaks, no spaces at line ends, and at most one empty line in a row.</summary>
+    /// <summary>
+    /// The text with Unix line ends, no page breaks, single spaces between words (the layout mode adds many), no spaces
+    /// at line ends, and at most one empty line in a row.
+    /// </summary>
     public static string Clean(string text)
     {
         var lines = text.Replace("\r\n", "\n").Replace('\r', '\n').Replace('\f', '\n')
             .Split('\n')
-            .Select(line => line.TrimEnd());
+            .Select(line => Spaces().Replace(line, " ").Trim());
         return BlankLines().Replace(string.Join('\n', lines), "\n\n").Trim();
     }
 }

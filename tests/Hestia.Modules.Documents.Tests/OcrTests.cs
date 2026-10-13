@@ -94,9 +94,10 @@ public class OcrTests
     }
 
     [Fact]
-    public void Clean_MakesUnixLines_WithoutPageBreaks_AndAtMostOneEmptyLine()
+    public void Clean_MakesUnixLines_WithSingleSpaces_WithoutPageBreaks_AndAtMostOneEmptyLine()
     {
         Assert.Equal("Page one\n\nPage two\nend", CommandLineOcrEngine.Clean("  \r\nPage one   \r\n\f\n\n\nPage two\rend\n\f"));
+        Assert.Equal("WARRANTY CARD\nTOASTER MODEL 2031", CommandLineOcrEngine.Clean("   WARRANTY   CARD\nTOASTER \t MODEL   2031\n\f"));
     }
 
     // The real OCR programs (as in the host image). CI installs them; without them, these tests are skipped.
