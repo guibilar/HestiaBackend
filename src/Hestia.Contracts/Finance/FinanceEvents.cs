@@ -26,7 +26,9 @@ public sealed record TransactionsImported(
     DateOnly? LastDate,
     DateTimeOffset OccurredAt) : IIntegrationEvent
 {
-    public int Version { get; init; } = 1;
+    public int Version { get; init; } = 2;
+
+    public Guid EventId { get; init; } = Guid.CreateVersion7();
 }
 
 /// <summary>What happened to a transaction.</summary>
@@ -69,7 +71,9 @@ public sealed record TransactionChanged(
     string CategoryName,
     DateTimeOffset OccurredAt) : IIntegrationEvent
 {
-    public int Version { get; init; } = 1;
+    public int Version { get; init; } = 2;
+
+    public Guid EventId { get; init; } = Guid.CreateVersion7();
 }
 
 /// <summary>
@@ -98,7 +102,9 @@ public sealed record BudgetLimitReached(
     public const int WarningPercent = 80;
     public const int LimitPercent = 100;
 
-    public int Version { get; init; } = 1;
+    public int Version { get; init; } = 2;
+
+    public Guid EventId { get; init; } = Guid.CreateVersion7();
 }
 
 /// <summary>Where a recorded balance came from.</summary>
@@ -126,7 +132,9 @@ public sealed record BalanceRecorded(
     BalanceSource Source,
     DateTimeOffset OccurredAt) : IIntegrationEvent
 {
-    public int Version { get; init; } = 1;
+    public int Version { get; init; } = 2;
+
+    public Guid EventId { get; init; } = Guid.CreateVersion7();
 }
 
 /// <summary>
@@ -147,7 +155,9 @@ public sealed record SubscriptionPriceChanged(
     DateOnly Since,
     DateTimeOffset OccurredAt) : IIntegrationEvent
 {
-    public int Version { get; init; } = 1;
+    public int Version { get; init; } = 2;
+
+    public Guid EventId { get; init; } = Guid.CreateVersion7();
 }
 
 /// <summary>The RabbitMQ names for the finance events. Finance and the host use the same names.</summary>

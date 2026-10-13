@@ -132,6 +132,8 @@ public class SampleItemTests
                 .ToListAsync());
 
         Assert.Contains("Items", tables);
+        Assert.Contains("Activity", tables);
+        Assert.Contains("EventInbox", tables);
         Assert.Contains("__EFMigrationsHistory", tables);
     }
 }

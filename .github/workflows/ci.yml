@@ -59,7 +59,7 @@ jobs:
 
   # Publishes Hestia.Contracts to GitHub Packages, for the finance backend (T04).
   # main: the version in the project file (once: a version that exists is skipped).
-  # A pull request from this repository that changes the contracts: a prerelease, 1.0.0-pr.<number>.<run>.
+  # A pull request from this repository that changes the contracts: a prerelease, <version>-pr.<number>.<run>.
   contracts-package:
     needs: build-and-test
     if: >-

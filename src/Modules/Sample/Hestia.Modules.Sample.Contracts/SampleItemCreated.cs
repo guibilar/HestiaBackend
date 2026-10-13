@@ -9,5 +9,7 @@ namespace Hestia.Modules.Sample.Contracts;
 /// </summary>
 public sealed record SampleItemCreated(Guid ItemId, string Name, DateTimeOffset OccurredAt) : IIntegrationEvent
 {
-    public int Version { get; init; } = 1;
+    public int Version { get; init; } = 2;
+
+    public Guid EventId { get; init; } = Guid.CreateVersion7();
 }

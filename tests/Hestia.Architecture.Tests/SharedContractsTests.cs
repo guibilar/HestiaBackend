@@ -29,7 +29,7 @@ public class SharedContractsTests
     }
 
     [Fact]
-    public void EveryEvent_IsARecord_WithAVersionThatTravels()
+    public void EveryEvent_IsARecord_WithAVersionAndAnEventIdThatTravel()
     {
         var events = HestiaContracts.Assembly.GetExportedTypes()
             .Where(type => type is { IsClass: true, IsAbstract: false } && typeof(IIntegrationEvent).IsAssignableFrom(type))
@@ -42,6 +42,9 @@ public class SharedContractsTests
             Assert.NotNull(type.GetMethod("<Clone>$"));
             var version = type.GetProperty(nameof(IIntegrationEvent.Version))!;
             Assert.True(version.CanWrite, $"{type.Name}.Version must have an init accessor, so it travels with the event.");
+            // T36: the consumers use it to handle each event once.
+            var eventId = type.GetProperty(nameof(IIntegrationEvent.EventId))!;
+            Assert.True(eventId.CanWrite, $"{type.Name}.EventId must have an init accessor, so it travels with the event.");
         });
     }
 }

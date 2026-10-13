@@ -1,4 +1,6 @@
+using System.Net.Http.Json;
 using Hestia.Contracts.Finance;
+using Hestia.Modules.Sample.Contracts;
 using Hestia.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -43,6 +45,51 @@ public class FinanceEventTests
     }
 
     [Fact]
+    public async Task AnEventThatComesTwice_HasTheSameEventId_AndAConsumerHandlesItOnce()
+    {
+        Assert.SkipUnless(TestRabbitMq.Available, $"Needs RabbitMQ: set {TestRabbitMq.Variable}.");
+        await using var host = new HestiaApiFactory(new Dictionary<string, string?> { ["Events:RabbitMq"] = TestRabbitMq.Address });
+        var client = host.CreateClient();
+        // The Sample consumer is the idempotent template. Here its event comes over the broker, as a finance event does.
+        using var finance = await StartFinanceStandInAsync(typeof(SampleItemCreated));
+        var imported = new TransactionsImported(Guid.NewGuid(), "Chequing", 3, 3, 0,
+            new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 30), DateTimeOffset.UtcNow);
+        var created = new SampleItemCreated(Guid.NewGuid(), "Kettle", DateTimeOffset.UtcNow);
+
+        // The same event twice: as the broker delivers it again after a lost acknowledgement.
+        await PublishAsync(finance, imported, imported, created, created);
+
+        var deliveries = await WaitForCountAsync<TransactionsImported>(host, 2);
+        Assert.All(deliveries, delivery => Assert.Equal(imported.EventId, delivery.EventId));
+        await WaitForCountAsync<SampleItemCreated>(host, 2);
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(15);
+        while ((await client.GetFromJsonAsync<SampleActivityDto>("/api/sample/activity"))!.ItemsCreated == 0 &&
+               DateTimeOffset.UtcNow < deadline)
+        {
+            await Task.Delay(50);
+        }
+        // A short wait, so a second change (the failure that this test looks for) has time to commit.
+        await Task.Delay(TimeSpan.FromSeconds(1));
+        var activity = await client.GetFromJsonAsync<SampleActivityDto>("/api/sample/activity");
+        Assert.Equal(1, activity!.ItemsCreated);
+    }
+
+    private static async Task<IReadOnlyList<T>> WaitForCountAsync<T>(HestiaApiFactory host, int count)
+    {
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(15);
+        while (true)
+        {
+            var events = host.Events.Events.OfType<T>().ToList();
+            if (events.Count >= count)
+            {
+                return events;
+            }
+            Assert.True(DateTimeOffset.UtcNow < deadline, $"Only {events.Count} of {count} {typeof(T).Name} came.");
+            await Task.Delay(50);
+        }
+    }
+
+    [Fact]
     public async Task Host_DoesNotStart_WithAnInvalidRabbitMqAddress()
     {
         await using var host = new HestiaApiFactory(new Dictionary<string, string?> { ["Events:RabbitMq"] = "http://rabbitmq:5672" });
@@ -53,7 +100,7 @@ public class FinanceEventTests
     }
 
     /// <summary>Publishes like the finance service: every finance event to the fanout exchange.</summary>
-    private static async Task<IHost> StartFinanceStandInAsync()
+    private static async Task<IHost> StartFinanceStandInAsync(params Type[] moreEventTypes)
     {
         var builder = Host.CreateApplicationBuilder();
         builder.UseWolverine(wolverine =>
@@ -63,7 +110,7 @@ public class FinanceEventTests
             wolverine.UseRabbitMq(new Uri(TestRabbitMq.Address!))
                 .AutoProvision()
                 .DeclareExchange(FinanceEventTopology.Exchange, exchange => exchange.ExchangeType = ExchangeType.Fanout);
-            foreach (var eventType in FinanceEventTopology.EventTypes)
+            foreach (var eventType in FinanceEventTopology.EventTypes.Concat(moreEventTypes))
             {
                 wolverine.PublishMessage(eventType).ToRabbitExchange(FinanceEventTopology.Exchange);
             }

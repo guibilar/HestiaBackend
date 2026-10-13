@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Net.Http.Json;
 using Hestia.Api.Events;
+using Hestia.Contracts;
 using Hestia.Contracts.Finance;
 using Hestia.Modules.Sample.Application;
 using Hestia.Modules.Sample.Contracts;
@@ -34,7 +35,8 @@ public class ModuleEventTests
         Assert.Equal(created.Id, received.ItemId);
         Assert.Equal("Kettle", received.Name);
         Assert.Equal(created.CreatedAt, received.OccurredAt);
-        Assert.Equal(1, received.Version);
+        Assert.Equal(2, received.Version);
+        Assert.NotEqual(Guid.Empty, received.EventId);
     }
 
     [Fact]
@@ -149,6 +151,32 @@ public class ModuleEventTests
 
         Assert.Contains(typeof(SampleItemCreated), types);
         Assert.All(FinanceEventTopology.EventTypes, type => Assert.Contains(type, types));
+    }
+
+    [Fact]
+    public void EveryEventType_HasAnEventId_ThatIsNewForEachEvent_AndTravels()
+    {
+        Assert.All(HestiaEvents.EventTypes(ModuleLoader.Discover()), type =>
+        {
+            var first = (IIntegrationEvent)NewEvent(type);
+            var second = (IIntegrationEvent)NewEvent(type);
+
+            Assert.NotEqual(Guid.Empty, first.EventId);
+            Assert.NotEqual(first.EventId, second.EventId);
+            // An init accessor: the deserializer sets it, so a second delivery has the same id as the first.
+            Assert.True(type.GetProperty(nameof(IIntegrationEvent.EventId))!.CanWrite,
+                $"{type.Name}.EventId must have an init accessor, so it travels with the event.");
+        });
+    }
+
+    /// <summary>An event made with its primary constructor and default values, as a publisher makes one.</summary>
+    private static object NewEvent(Type type)
+    {
+        var constructor = type.GetConstructors().OrderByDescending(c => c.GetParameters().Length).First();
+        var arguments = constructor.GetParameters()
+            .Select(p => p.ParameterType.IsValueType ? Activator.CreateInstance(p.ParameterType) : null)
+            .ToArray();
+        return constructor.Invoke(arguments);
     }
 
     [Fact]

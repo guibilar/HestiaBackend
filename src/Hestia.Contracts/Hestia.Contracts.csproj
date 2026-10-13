@@ -7,8 +7,8 @@
     <IsPackable>true</IsPackable>
     <PackageId>Hestia.Contracts</PackageId>
     <!-- Change the version when a contract changes. CI publishes it from main once (see the README).
-         A pull request publishes a prerelease of it (1.0.0-pr.<number>.<run>) when it changes this project. -->
-    <VersionPrefix>1.0.0</VersionPrefix>
+         A pull request publishes a prerelease of it (<version>-pr.<number>.<run>) when it changes this project. -->
+    <VersionPrefix>1.1.0</VersionPrefix>
     <Authors>guibilar</Authors>
     <Description>Event and DTO contracts that Hestia shares with other services, for example the finance events.</Description>
     <RepositoryUrl>https://github.com/guibilar/HestiaBackend</RepositoryUrl>

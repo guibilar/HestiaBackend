@@ -31,7 +31,7 @@ public static class SampleModuleExtensions
         services.AddScoped<SampleItemService>();
         services.AddScoped<ISampleItemQueries, SampleItemQueries>();
         // Event consumers (SampleItemCreatedConsumer) need no registration: Wolverine finds them in the module assembly.
-        services.AddSingleton<SampleActivity>();
+        services.AddScoped<SampleActivityQueries>();
         return services;
     }
 

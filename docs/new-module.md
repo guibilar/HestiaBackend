@@ -74,14 +74,56 @@ HESTIA_TEST_POSTGRES=container dotnet test
 
 A module event tells other modules that something changed (D7). See the README, section "Events".
 
-1. Put the event in the `.Contracts` project: a `sealed record` that implements `IIntegrationEvent`, with
-   `public int Version { get; init; } = 1;`. Example: `SampleItemCreated`.
+1. Put the event in the `.Contracts` project: a `sealed record` that implements `IIntegrationEvent`, with these two
+   properties. Example: `SampleItemCreated`.
+
+   ```csharp
+   public int Version { get; init; } = 1;
+   public Guid EventId { get; init; } = Guid.CreateVersion7();
+   ```
+
+   Do not set `EventId` yourself: each new event object gets a new one.
 2. Raise it on the module's DbContext before the save: `db.RaiseEvent(new DocumentAdded(...))`. The host publishes it
    after the commit, and never when the save fails or the transaction rolls back.
 3. Consume an event (from your module, another module, or finance) with a public class whose name ends in `Consumer`,
-   with a public `Consume(TEvent message)` method. Example: `SampleItemCreatedConsumer`. Make it idempotent: an event can
-   come more than once.
-4. In tests, each `HestiaApiFactory` records what the consumers get: `await factory.Events.WaitForAsync<DocumentAdded>()`.
+   with a public `Consume(TEvent message, CancellationToken cancellationToken)` method. Example:
+   `SampleItemCreatedConsumer`.
+4. **Make each consumer idempotent.** An event can come more than once (RabbitMQ delivers again after a failure), and
+   the consumer must change the data only once (T36). Use the module's event inbox:
+   1. In `OnModelCreating` of your DbContext, call `modelBuilder.AddEventInbox();` (namespace `Hestia.Platform.Events`).
+      Then add a migration (step 4): it adds the table `EventInbox` to your schema.
+   2. Take your module's DbContext in the consumer. Give the consumer a stable inbox name, `"<Module>.<Class>"`.
+      Do not change the name later: a consumer with a new name handles old events again.
+   3. Do the three steps below. The change and the inbox row commit together in one save, or neither commits.
+
+   ```csharp
+   public sealed class DocumentAddedConsumer(DocumentsDbContext db)
+   {
+       public const string InboxName = "Documents.DocumentAddedConsumer";
+
+       public async Task Consume(DocumentAdded message, CancellationToken cancellationToken)
+       {
+           if (!await db.TryReceiveAsync(message.EventId, InboxName, cancellationToken))
+           {
+               return; // Handled already.
+           }
+           db.Index.Add(new IndexEntry { /* ... */ });
+           await db.SaveChangesAsync(cancellationToken);
+       }
+   }
+   ```
+
+   - Save once. If the consumer must save more than once, put all the saves in one transaction with the execution
+     strategy (`db.Database.CreateExecutionStrategy()`), and call `TryReceiveAsync` inside it.
+   - A consumer that changes no data in your schema (for example, it only logs) needs no inbox.
+   - A consumer that calls another system (for example a write to finance) cannot make that call part of the save.
+     Make the call idempotent too (for example, send the `EventId` with it), or save first and call after.
+   - Two deliveries at the same time: one save fails on the inbox key, and its change does not commit. Wolverine
+     handles the failure as any consumer error (a retry finds the inbox row and does nothing). The other delivery's
+     change stays, so the data changes once.
+5. In tests, each `HestiaApiFactory` records what the consumers get: `await factory.Events.WaitForAsync<DocumentAdded>()`.
+   Add a test that delivers the same event twice and checks that the data changed once. Example:
+   `tests/Hestia.Modules.Sample.Tests/IdempotentConsumerTests.cs`.
 
 ## 7. Cards on Today (when the module has them)
 
