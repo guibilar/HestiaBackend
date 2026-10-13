@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, hestia/T55-probe-vulnerable]  # PROBE (T55)
   pull_request:
   # Weekly, so advisories published after the last commit still fail the vulnerability check.
   schedule:
