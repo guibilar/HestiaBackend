@@ -2,6 +2,7 @@ using Hestia.Platform.Events;
 using Hestia.Platform.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Metadata;
 
 namespace Hestia.Platform.Tests;
 
