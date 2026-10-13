@@ -11,7 +11,7 @@
     <!-- The finance proxy (Gateway/FinanceProxy.cs). -->
     <PackageReference Include="Yarp.ReverseProxy" />
     <!-- PROBE (T55): a vulnerable shipped package. -->
-    <PackageReference Include="System.Security.Cryptography.Xml" />
+    <PackageReference Include="SharpZipLib" />
     <!-- Events: in-process module events and the finance events from RabbitMQ (Events/HestiaEvents.cs). -->
     <PackageReference Include="WolverineFx" />
     <PackageReference Include="WolverineFx.RabbitMQ" />
