@@ -16,7 +16,7 @@ defaults:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v6
@@ -35,6 +35,13 @@ jobs:
 
       - name: Migrations match the model (each module)
         run: sh scripts/check-migrations.sh
+
+      # T11: the OCR programs of the host image, so the Documents tests run the real OCR on the sample files.
+      - name: OCR programs (ocrmypdf, Tesseract, pdftotext)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends ocrmypdf tesseract-ocr-eng poppler-utils > /dev/null
+          echo "::notice title=OCR programs::$(ocrmypdf --version), $(tesseract --version 2>&1 | head -n 1), $(pdftotext -v 2>&1 | head -n 1)"
 
       # Includes the architecture tests (tests/Hestia.Architecture.Tests): the module rules of D6.
       # --report-xunit-trx: xUnit v3 writes one TRX file per test project, for the annotations (T26).
@@ -118,7 +125,7 @@ jobs:
 
   docker:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     # What .env provides on the server.
     env:
       POSTGRES_PASSWORD: ci-database-password
@@ -200,6 +207,31 @@ jobs:
           echo "$body" | jq -c '{date, modules, tiles: [.cards[] | select(.type == "Tile") | .id]}'
           echo "$body" | jq -e '.modules[0].module == "Money" and .modules[0].status == "Partial"
             and ([.cards[] | select(.type == "Tile") | .id] == ["money.spent-this-month", "money.left-over-this-month", "money.net-worth", "money.budgets"])'
+      # T11: a document with a scanned PDF (no text layer) and a PNG. The OCR runs in the container, in the background.
+      - name: Documents upload, background OCR in the image, search, and download
+        run: |
+          samples=tests/Hestia.Modules.Documents.Tests/Samples
+          body=$(curl -sf -H "Cookie: $SESSION_COOKIE" -F title="CI toaster" -F kind=Warranty -F tags=kitchen \
+            -F "files=@$samples/scanned-warranty.pdf;type=application/pdf" -F "files=@$samples/receipt.png;type=image/png" \
+            http://localhost:5097/api/documents)
+          echo "$body" | jq -c '{id, ocrStatus, files: [.files[] | {fileName, contentType, size}]}'
+          id=$(echo "$body" | jq -r .id)
+          for i in $(seq 1 120); do
+            body=$(curl -sf -H "Cookie: $SESSION_COOKIE" "http://localhost:5097/api/documents/$id")
+            [ "$(echo "$body" | jq -r .ocrStatus)" = Pending ] || break
+            sleep 1
+          done
+          echo "$body" | jq -c '{ocrStatus, ocrError, ocrText}'
+          echo "$body" | jq -e '.ocrStatus == "Done" and (.ocrText | test("WARRANTY")) and (.ocrText | test("RECEIPT"))'
+          # Full-text search finds a word that is only in the OCR text of the scanned PDF.
+          curl -sf -H "Cookie: $SESSION_COOKIE" 'http://localhost:5097/api/documents?q=toaster' \
+            | jq -e --arg id "$id" '.totalCount == 1 and .items[0].id == $id'
+          # The download is the uploaded file.
+          file=$(echo "$body" | jq -r '.files[0].id')
+          [ "$(curl -sf -H "Cookie: $SESSION_COOKIE" "http://localhost:5097/api/documents/$id/files/$file" | sha256sum | cut -d' ' -f1)" \
+            = "$(sha256sum "$samples/scanned-warranty.pdf" | cut -d' ' -f1)" ]
+          # The file is on the documents volume, owned by the host's user.
+          docker exec hestia-api sh -c 'find /data/documents -type f ! -path "*/tmp/*" | wc -l'
       - name: A module event reaches its consumer after the commit (in process)
         run: |
           curl -sf -H "Cookie: $SESSION_COOKIE" -X POST -H 'Content-Type: application/json' -d '{"name":"CI kettle"}' \

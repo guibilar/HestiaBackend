@@ -20,6 +20,7 @@ src/
                                     health check, reverse proxy setup, IModule, module database setup
   Hestia.Contracts/                 contracts shared with other processes (finance events), a NuGet package
   Modules/
+    Documents/                      documents: files on a volume, OCR, full-text search, expiry, links (T11)
     Identity/                       sign-in: users, sessions, the read-only token, /api/Auth (T03)
     Today/                          the Today screen: /api/today, the cards of all modules (T08)
     Sample/
@@ -30,6 +31,7 @@ tests/
   Hestia.Architecture.Tests/        the module rules
   Hestia.Platform.Tests/
   Hestia.Api.Tests/
+  Hestia.Modules.Documents.Tests/   with small sample files (Samples/) for the upload and OCR tests
   Hestia.Modules.Identity.Tests/
   Hestia.Modules.Sample.Tests/
   Hestia.Modules.Today.Tests/
@@ -92,6 +94,7 @@ Endpoints now:
 | `GET /api/sample/items?page=1&pageSize=20` | Sample module: a page of items. |
 | `POST /api/sample/items` | Sample module: make an item, `{ "name": "Kettle" }`. |
 | `GET /api/sample/activity` | Sample module: what its event consumer saw since the host started (`itemsCreated`, `lastItemName`). |
+| `/api/documents/...` | Documents module: upload, list and search, download, links (see [Documents](#documents)). |
 | `/api/Accounts`, `/api/Transaction`, and the other finance paths | Proxied to the finance backend, with a gateway token. |
 
 All endpoints except the sign-in and the health checks need a signed-in user.
@@ -242,6 +245,89 @@ logic is in one place, here, and not in the web and Android clients.
 | `TimeZone` | `America/Toronto` | The IANA time zone that decides which day it is. Use the same zone as finance (`Reports:TimeZone`), so "this month" is the same month. Docker: `TZ` in `.env`. |
 | `CacheDuration` | `00:00:30` | How long a complete answer stays for a user. `00:00:00` turns the cache off. |
 | `ProviderTimeout` | `00:00:15` | How long the host waits for one module's cards. |
+
+## Documents
+
+The Documents module (T11, schema `documents`) keeps receipts, warranties, leases, tax slips, insurance policies, and
+manuals. A document has details (title, kind, tags, issue and expiry dates, notes), one or more files, and links to
+things outside the module (first: finance transactions).
+
+```
+upload ──> files to the volume (by SHA-256) + rows and DocumentAdded (one save) ──> 201, ocrStatus Pending
+                                                          OCR worker (background) ──> OcrText, Done or Failed, DocumentChanged
+```
+
+**Endpoints** (prefix `/api/documents`; a read-only user can call the GET endpoints only):
+
+| Endpoint | Description |
+| --- | --- |
+| `POST /` | Upload, as `multipart/form-data`: `files` (one or more), `title` (default: the first file name), `kind` (`Receipt`, `Warranty`, `Lease`, `Tax`, `Insurance`, `Manual`, `Other`; default `Other`), `tags` (repeat the field, or use commas), `issuedOn` and `expiresOn` (`yyyy-MM-dd`), `notes`. Answers 201 at once, with `ocrStatus` `Pending`. |
+| `GET /?kind=&tag=&q=&expiresFrom=&expiresTo=&page=1&pageSize=20` | A page of documents, newest first. `q` is a full-text search (best match first). |
+| `GET /{id}` | One document, with its OCR text. |
+| `PUT /{id}` | New details (all of them, JSON). The files stay. |
+| `DELETE /{id}` | Deletes the document, its links, and its files. |
+| `GET /{id}/files/{fileId}` | The file, as a download. `?inline=true` shows it in the browser. |
+| `POST /{id}/ocr` | Runs the OCR again (202, `ocrStatus` `Pending`). |
+| `POST /{id}/links`, `DELETE /{id}/links/{linkId}` | A link, `{ "kind": "Money.Transaction", "targetId": "<transaction id>" }`. |
+| `GET /by-link?kind=Money.Transaction&id=<transaction id>` | The documents of one thing (for T14). |
+
+```bash
+curl -b cookies -F title="Kettle receipt" -F kind=Receipt -F tags=kitchen -F expiresOn=2028-10-13 \
+  -F "files=@receipt.pdf" http://localhost:5097/api/documents
+curl -b cookies 'http://localhost:5097/api/documents?q=kettle'
+```
+
+**Files (D9).** The files are on a volume (`Documents:StoragePath`; in Docker the volume `hestia_documents` at
+`/data/documents`). Each file is at `<first two characters of its SHA-256>/<SHA-256>`, so the same content is stored
+once, also for two documents. A delete removes a file only when no other document has the same content. An upload
+writes to `tmp/` first. The host finds the type in the first bytes of each file (PDF, JPEG, PNG, HEIC, WebP) and never
+trusts the type or the name that the client sends. Downloads send `X-Content-Type-Options: nosniff`.
+
+**OCR (D3, D9).** A worker in the host (`OcrWorker`) reads the `Pending` documents, oldest first, one at a time. An
+upload wakes it at once. The status is in the database, so a restart loses no work.
+
+- PDF: `ocrmypdf --skip-text` adds a text layer to the pages without text (Tesseract), then `pdftotext` reads all
+  the text. A PDF with its own text keeps it.
+- JPEG, PNG, WebP: `tesseract`. HEIC: `heif-convert` (or `heif-dec`) makes a PNG first.
+- The text of all files goes to `ocrText` (at most 200,000 characters). A failure sets `Failed` with the error of each
+  file in `ocrError`, keeps the document, and keeps the text that was found (for example the text layer of an
+  encrypted PDF). `POST /{id}/ocr` runs it again. The command `documents-retry-ocr` puts all `Failed` and `NotNeeded`
+  documents back to `Pending`: `docker compose run --rm -T hestia-api documents-retry-ocr`, then restart the host.
+- The image has the programs and English (`tesseract-ocr-eng`). Another language needs its package in the
+  `Dockerfile`, and `DOCUMENTS_OCR_LANGUAGE` (for example `eng+fra`).
+
+**Search.** A PostgreSQL full-text index (a generated `tsvector` column with a GIN index) has the title and the tags
+(weight A), the notes (B), and the OCR text (C), each in the `english` configuration (stems: "warranties" finds
+"warranty") and the `simple` configuration (names, numbers, other languages). `q` uses the web search syntax
+(`"exact phrase"`, `-word`). The in-memory test database searches the plain text instead.
+
+**Links.** A link has a kind and an id, both text, so later modules (Home inventory, People) can use the same table.
+The first kind is `Money.Transaction`: the host asks finance with the signed-in user whether the transaction exists
+(`POST /api/Transaction/Filter` with the transaction id, a read-only query). It never reads the finance database.
+Finance down: 502.
+
+**Events (durable, T38).** `DocumentAdded`, `DocumentChanged` (`Change`: `Details` or `OcrText`), `DocumentDeleted`,
+`DocumentLinked`, and `DocumentUnlinked`, in `Hestia.Modules.Documents.Contracts`. A delete sends `DocumentUnlinked`
+for each link first. Other modules read more with `IDocumentQueries` (`FindAsync`, `ListByLinkAsync`).
+
+**Today.** A "Needs attention" item for each document that expires in the next 30 days, or expired in the last 7
+days (`documents.expiring.<id>`, `documents.expired.<id>`, link `/documents/<id>`). T15 (Alerts) is not merged yet, so
+the rules are a Today provider (`DocumentsTodayCards`). They move to an Alerts source when the Alerts module comes.
+
+| Setting (`Documents` section) | Default | Description |
+| --- | --- | --- |
+| `StoragePath` | (none) | The folder of the files. Required. Docker: `/data/documents` (the volume). A relative path is below the content root. |
+| `MaxFileSizeMb` | `25` | The largest file. |
+| `MaxUploadSizeMb` | `100` | The largest upload (all files). |
+| `MaxFilesPerDocument` | `10` | The most files in one upload. |
+| `AllowedContentTypes` | all five | A subset of `application/pdf`, `image/jpeg`, `image/png`, `image/heic`, `image/webp`. |
+| `Ocr:Enabled` | `true` | `false`: new documents get `NotNeeded`, and the worker does not run. |
+| `Ocr:Language` | `eng` | The Tesseract language(s). Docker: `DOCUMENTS_OCR_LANGUAGE`. |
+| `Ocr:Timeout` | `00:10:00` | The longest OCR of one file. |
+| `Ocr:PollInterval` | `00:01:00` | How often the worker looks for `Pending` documents without an upload signal. |
+| `Expiry:SoonDays`, `Expiry:ExpiredDays` | `30`, `7` | The windows of the Today items. |
+
+The frontend's nginx must let large uploads through: its `client_max_body_size` must be at least `MaxUploadSizeMb`.
 
 ### OpenAPI document
 
@@ -417,6 +503,8 @@ HESTIA_TEST_POSTGRES=container HESTIA_TEST_RABBITMQ=container dotnet test   # Po
 ```
 
 `HESTIA_TEST_POSTGRES` can also be the connection string of a PostgreSQL server that you run yourself.
+The OCR tests of the Documents module run the real programs when `ocrmypdf`, `pdftotext`, and `tesseract` are on the
+`PATH` (CI installs them); else they are skipped. The other Documents tests use a fake OCR.
 Each test host gets its own database, and the tests delete it at the end. `HESTIA_TEST_RABBITMQ` can also be the
 `amqp://` address of a broker that you run yourself. Without it, the RabbitMQ tests are skipped.
 Each `HestiaApiFactory` records the events that reach its consumers, for every event type (`factory.Events`).
@@ -479,6 +567,8 @@ dotnet ef migrations add <Name> \
 ## Docker
 
 `docker-compose.yml` starts the host (`hestia-api`), its PostgreSQL (`hestia-db`, database `Hestia`), and the `backup` service ([Backups](#backups)).
+The document files are in the volume `hestia_documents` (T11). The image has the OCR programs (ocrmypdf, Tesseract with
+English, pdftotext, and the HEIF tools).
 The host joins the external network `finance`, which the finance backend's compose project makes.
 Start the finance project first. The host reaches finance there as `http://personal-finance-api:8080`.
 
@@ -509,6 +599,14 @@ night at `BACKUP_AT` (03:00, Toronto time, `TZ`). The dumps contain all module s
 same image as the database, in the custom format of `pg_restore`.
 
 **Where the backup files are:** in the Docker volume `hestia_backups`, as `hestia-<date>_<time>.dump`.
+
+**Document files (T11).** After each dump, the service copies the document files (the volume `hestia_documents`) into a
+folder next to the dump, with the same name: `hestia-<date>_<time>.documents/`. A file that the previous copy has
+already becomes a hard link to it (a file never changes: its name is its SHA-256), so each copy takes space only for
+the new files. The copy comes after the dump: an upload stores its file before its row, and a delete removes the file
+after its row, so the files of all rows in the dump are in the copy. The folders go away with their dumps after
+`BACKUP_KEEP_DAYS`. One backup job for both keeps the rows and the files together: a separate file backup could
+restore files from another day than the rows.
 
 - `docker compose exec backup ls -l /backups` lists them.
 - `docker volume inspect hestia_backups` shows the folder on this machine (usually `/var/lib/docker/volumes/hestia_backups/_data`, readable by root only).
@@ -541,15 +639,23 @@ docker compose exec backup backup.sh once      # make an extra dump now
 
 The script does these steps:
 
-1. It saves the current database as `before-restore-<time>.dump` in the volume. The nightly clean-up does not
-   delete these files. Delete them yourself when you do not need them.
+1. It saves the current database as `before-restore-<time>.dump` in the volume, with its document files
+   (`before-restore-<time>.documents/`). The nightly clean-up does not delete these. Delete them yourself when you do
+   not need them.
 2. It stops `hestia-api`.
 3. It drops all schemas of the database, and restores the dump, in one transaction. If a step fails, the database
    stays as it was.
-4. It starts `hestia-api` again. The host applies the migrations that are newer than the dump.
+4. T11: it puts back the document files from the `.documents` folder next to the dump (in the volume, or next to the
+   file on this machine), removes the files that came after the dump, and gives the files back to the host's user
+   (1654). Without that folder, it says so and does not touch the files.
+5. It starts `hestia-api` again. The host applies the migrations that are newer than the dump.
+
+To restore a copy from another place, copy both the `.dump` file and its `.documents` folder.
 
 To undo a restore, restore the `before-restore-<time>.dump` file in the same way.
 
-CI checks the backups in the Docker job (`docker/ci/backup-restore-check.sh`). It adds a Sample item, makes a dump,
-restores the dump into an empty database, and checks the `sample` schema and the item. Then it runs `docker/restore.sh`
-with a dump from the volume and with a file on the runner.
+CI checks the backups in the Docker job (`docker/ci/backup-restore-check.sh`). It adds a Sample item and a document
+with a file, makes a dump, restores the dump into an empty database, and checks the `sample` schema, the item, the
+document, and the copy of its file. Then it runs `docker/restore.sh` with a dump from the volume and with a file (and
+its `.documents` folder) on the runner, and checks that the document downloads its file and that the later document
+and its file are gone.

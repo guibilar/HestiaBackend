@@ -151,7 +151,28 @@ The Today screen shows cards from all modules (T08, see the README, section "Tod
    modules. If only a part of your data loads, return the cards that you have with `Complete: false`.
 6. Test it through `GET /api/today` with `HestiaApiFactory`.
 
-## 8. Check
+## 8. Tips from the Documents module (T11)
+
+- **A model part for PostgreSQL only** (for example a `tsvector` column): check the provider in `OnModelCreating`
+  with `if (Database.IsNpgsql()) { ... } else { entity.Ignore(...); }`. The migrations and the architecture tests use
+  PostgreSQL; the in-memory tests get the other model. Give the in-memory database a simple fallback in the query.
+- **A new child row** (for example a link of a document) with an id that the code sets: add it with its own `DbSet`
+  (`db.Links.Add(link)`), not to the collection of a tracked parent. EF Core thinks that a child with a key value
+  exists already, and tries an update.
+- **A file upload:** read the form with `request.ReadFormAsync(...)` from an `HttpRequest` parameter. Form binding
+  (`IFormFile` parameters) makes the endpoint ask for an antiforgery token. Set the request size limit in the endpoint
+  (`IHttpMaxRequestBodySizeFeature`): Kestrel allows 30 MB by default.
+- **Background work in a module:** a `BackgroundService` (`services.AddHostedService<...>()`) with a new service scope
+  for each unit of work. Keep the state of the work in the module's tables (for example a status column), so a
+  restart loses nothing.
+- **Today tests:** a new `ITodayCardProvider` adds a module to every `GET /api/today`. The Today tests leave out the
+  providers of other modules; test your provider in your module's tests, and read only your module's cards.
+- **JSON with enums in tests:** the host reads enums by name only. Send a request body with
+  `PutAsJsonAsync(url, body, HestiaApiFactory.Json)`.
+- **Times in tests:** PostgreSQL keeps microseconds, .NET keeps 100 ns. Compare a time that went through the database
+  with a time from the database, not with the value that the code made.
+
+## 9. Check
 
 - `dotnet build` has no warnings.
 - `dotnet test` passes, with the architecture tests.
