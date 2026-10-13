@@ -108,14 +108,18 @@ public class HardeningTests
         try
         {
             var check = new DocumentStorageHealthCheck(Storage(root));
-            Assert.Equal(HealthStatus.Healthy, (await check.CheckHealthAsync(new HealthCheckContext())).Status);
-
             // "tmp" is a file, so the host cannot make the folder or write in it (also as root, unlike a file mode).
-            await File.WriteAllTextAsync(Path.Combine(root, DocumentStorage.TempFolder), "not a folder");
+            var temp = Path.Combine(root, DocumentStorage.TempFolder);
+            await File.WriteAllTextAsync(temp, "not a folder");
+
             var result = await check.CheckHealthAsync(new HealthCheckContext());
 
             Assert.Equal(HealthStatus.Unhealthy, result.Status);
             Assert.Contains("cannot write", result.Description);
+
+            // After a fix, the check is healthy again.
+            File.Delete(temp);
+            Assert.Equal(HealthStatus.Healthy, (await check.CheckHealthAsync(new HealthCheckContext())).Status);
         }
         finally
         {
