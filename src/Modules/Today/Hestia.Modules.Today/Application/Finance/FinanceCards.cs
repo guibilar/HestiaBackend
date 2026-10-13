@@ -23,7 +23,8 @@ public static class FinanceCards
 
     public const string BudgetsLink = "/money/budgets";
     public const string NetWorthLink = "/money/net-worth";
-    public const string TransactionsLink = "/money/transactions";
+    /// <summary>The Transactions page with the statement import open (T57).</summary>
+    public const string TransactionsImportLink = "/money/transactions#import";
     public const string SubscriptionsLink = "/money/subscriptions";
     public const string UnsortedLink = "/money/rules#unsorted";
 
@@ -233,7 +234,7 @@ public static class FinanceCards
                 yield return Attention("statements-not-imported", "statements-not-imported", "No recent import",
                     "No statements imported in {days} days",
                     new Dictionary<string, TodayValue> { ["days"] = TodayValue.Count(days) },
-                    TodaySeverity.Warning, TransactionsLink);
+                    TodaySeverity.Warning, TransactionsImportLink);
             }
         }
 
@@ -246,7 +247,7 @@ public static class FinanceCards
                     ["account"] = TodayValue.Plain(account.Name),
                     ["reach"] = TodayValue.Day(StatementsReach(account)!.Value)
                 },
-                TodaySeverity.Warning, TransactionsLink);
+                TodaySeverity.Warning, TransactionsImportLink);
         }
 
         foreach (var payment in inputs.Recurring?.Payments ?? new List<RecurringPayment>())
