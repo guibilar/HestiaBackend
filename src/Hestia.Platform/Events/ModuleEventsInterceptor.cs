@@ -15,22 +15,39 @@ namespace Hestia.Platform.Events;
 /// <item>A failed save publishes nothing. Its events stay on the context for a later save.</item>
 /// </list>
 /// The in-process path is not durable: if the process stops between the commit and the publish, the event is lost.
-/// A module that cannot lose an event needs an outbox in its schema (a later task).
+/// <para>A module with durable events (T38, <see cref="ModuleDatabaseOptions.UseDurableEvents"/>) uses its outbox: the
+/// save writes each raised event as a row of its outbox, in the same transaction as the change. After the commit, this
+/// interceptor only wakes the host's outbox sender (<see cref="ModuleOutboxSignal"/>), which delivers the events.</para>
 /// </summary>
-public sealed class ModuleEventsInterceptor(IEventPublisher publisher, ILogger<ModuleEventsInterceptor> logger)
+public sealed class ModuleEventsInterceptor(
+    IEventPublisher publisher,
+    IModuleEventSerializer serializer,
+    IEnumerable<ModuleDatabase> databases,
+    ModuleOutboxSignal outboxSignal,
+    ILogger<ModuleEventsInterceptor> logger)
     : SaveChangesInterceptor
 {
+    private readonly HashSet<Type> _durable = databases.Where(d => d.DurableEvents).Select(d => d.ContextType).ToHashSet();
+
     public override InterceptionResult<int> SavingChanges(DbContextEventData eventData, InterceptionResult<int> result)
     {
-        (eventData.Context as ModuleDbContext)?.SaveStarting();
+        SaveStarting(eventData.Context);
         return result;
     }
 
     public override ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData,
         InterceptionResult<int> result, CancellationToken cancellationToken = default)
     {
-        (eventData.Context as ModuleDbContext)?.SaveStarting();
+        SaveStarting(eventData.Context);
         return ValueTask.FromResult(result);
+    }
+
+    private void SaveStarting(DbContext? context)
+    {
+        if (context is ModuleDbContext module)
+        {
+            module.SaveStarting(_durable.Contains(module.GetType()) ? serializer : null);
+        }
     }
 
     public override int SavedChanges(SaveChangesCompletedEventData eventData, int result)
@@ -84,6 +101,11 @@ public sealed class ModuleEventsInterceptor(IEventPublisher publisher, ILogger<M
     /// <summary>Publishes the committed events. The change is stored already, so a failure here is logged, not thrown.</summary>
     internal async ValueTask PublishCommittedAsync(ModuleDbContext context, CancellationToken cancellationToken)
     {
+        // Durable events: the rows are committed with the change. The sender delivers them.
+        if (context.TakeOutboxWritten())
+        {
+            outboxSignal.Wake();
+        }
         foreach (var @event in context.TakeCommitted())
         {
             try

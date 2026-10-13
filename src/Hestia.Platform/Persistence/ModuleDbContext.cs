@@ -15,8 +15,11 @@ public abstract class ModuleDbContext(DbContextOptions options, string schema) :
     // Saved inside an explicit transaction: published when the transaction commits.
     private readonly List<object> _waitingForCommit = [];
 
-    // How many raised events the save in progress includes.
+    // How many raised events the save in progress includes (in-memory path).
     private int _inSave;
+
+    // Durable events (T38): a save wrote outbox rows, so the sender gets a signal after the commit.
+    private bool _outboxWritten;
 
     public string Schema { get; } = schema;
 
@@ -25,7 +28,12 @@ public abstract class ModuleDbContext(DbContextOptions options, string schema) :
     /// <c>SaveChanges</c> of this context commits: at once without an explicit transaction, else when the
     /// transaction commits. A failed save or a rolled-back transaction publishes nothing (D7).
     /// </summary>
-    /// <remarks>Put the event type in the module's <c>.Contracts</c> project, so other modules can consume it.</remarks>
+    /// <remarks>
+    /// <para>Put the event type in the module's <c>.Contracts</c> project, so other modules can consume it.</para>
+    /// <para>A module with durable events (T38, <see cref="ModuleDatabaseOptions.UseDurableEvents"/>): the save writes the
+    /// event to the module's outbox, in the same transaction as the change. The host's outbox sender delivers it after
+    /// the commit, also after a restart.</para>
+    /// </remarks>
     public void RaiseEvent(object @event)
     {
         ArgumentNullException.ThrowIfNull(@event);
@@ -79,10 +87,54 @@ public abstract class ModuleDbContext(DbContextOptions options, string schema) :
         return true;
     }
 
-    /// <summary>The events that this context holds and did not publish yet (raised or waiting for a commit).</summary>
+    /// <summary>
+    /// The events that this context holds in memory and did not publish yet (raised, or waiting for a commit). In a
+    /// module with durable events, a save moves the raised events to outbox rows, so they do not count here.
+    /// </summary>
     public int UnpublishedEventCount => _raised.Count + _waitingForCommit.Count;
 
-    internal void SaveStarting() => _inSave = _raised.Count;
+    /// <summary>A save starts. With <paramref name="outbox"/> (durable events), the raised events become outbox rows.</summary>
+    internal void SaveStarting(IModuleEventSerializer? outbox)
+    {
+        if (outbox is null)
+        {
+            _inSave = _raised.Count;
+            return;
+        }
+        _inSave = 0;
+        WriteOutbox(outbox);
+    }
+
+    /// <summary>
+    /// Adds an outbox row for each raised event, so the save stores the events with the change (T38). A failed save
+    /// keeps the rows as added, so a later save that succeeds stores them.
+    /// </summary>
+    private void WriteOutbox(IModuleEventSerializer serializer)
+    {
+        if (_raised.Count == 0)
+        {
+            return;
+        }
+        if (Model.FindEntityType(typeof(OutboxMessage)) is null)
+        {
+            throw new InvalidOperationException(
+                $"{GetType().Name} uses durable events, but has no event outbox. Call " +
+                $"modelBuilder.{nameof(EventOutboxModelBuilderExtensions.AddEventOutbox)}() in OnModelCreating, and add a migration.");
+        }
+
+        // All rows first: an event that cannot be stored fails the save before any row is added.
+        var now = DateTimeOffset.UtcNow;
+        var rows = _raised.Select(@event => new OutboxMessage
+        {
+            EventType = serializer.TypeName(@event),
+            Payload = serializer.Serialize(@event),
+            RaisedAt = now,
+            NextAttemptAt = now
+        }).ToList();
+        Set<OutboxMessage>().AddRange(rows);
+        _raised.Clear();
+        _outboxWritten = true;
+    }
 
     /// <summary>The save succeeded: the events that it included are now stored with the change.</summary>
     internal void SaveSucceeded()
@@ -103,8 +155,20 @@ public abstract class ModuleDbContext(DbContextOptions options, string schema) :
         return events;
     }
 
+    /// <summary>True once after a commit that stored outbox rows (durable events): then wake the sender.</summary>
+    internal bool TakeOutboxWritten()
+    {
+        var written = _outboxWritten;
+        _outboxWritten = false;
+        return written;
+    }
+
     /// <summary>The transaction rolled back: the events of its saves did not happen.</summary>
-    internal void DropUncommitted() => _waitingForCommit.Clear();
+    internal void DropUncommitted()
+    {
+        _waitingForCommit.Clear();
+        _outboxWritten = false;
+    }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

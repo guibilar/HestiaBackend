@@ -24,10 +24,17 @@ public sealed class SampleModule : IModule
 
 public static class SampleModuleExtensions
 {
+    /// <summary>True: the Sample module stores its events in its outbox (durable events, T38).</summary>
+    public const string DurableEventsSetting = "Sample:DurableEvents";
+
     /// <summary>Registers everything the Sample module needs, with one call.</summary>
     public static IServiceCollection AddSampleModule(this IServiceCollection services, IConfiguration configuration)
     {
-        services.AddModuleDbContext<SampleDbContext>(SampleDbContext.SchemaName);
+        // Module events are in memory after the commit by default. The Sample module shows both modes: the setting
+        // Sample:DurableEvents (default false) turns on durable events, through the module's outbox (T38).
+        // A module that must never lose an event calls database.UseDurableEvents() with no setting.
+        services.AddModuleDbContext<SampleDbContext>(SampleDbContext.SchemaName,
+            database => database.UseDurableEvents(configuration.GetValue<bool>(DurableEventsSetting)));
         services.AddScoped<SampleItemService>();
         services.AddScoped<ISampleItemQueries, SampleItemQueries>();
         // Event consumers (SampleItemCreatedConsumer) need no registration: Wolverine finds them in the module assembly.

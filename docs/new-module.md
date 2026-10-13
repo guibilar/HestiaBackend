@@ -85,10 +85,21 @@ A module event tells other modules that something changed (D7). See the README, 
    Do not set `EventId` yourself: each new event object gets a new one.
 2. Raise it on the module's DbContext before the save: `db.RaiseEvent(new DocumentAdded(...))`. The host publishes it
    after the commit, and never when the save fails or the transaction rolls back.
-3. Consume an event (from your module, another module, or finance) with a public class whose name ends in `Consumer`,
+3. **Choose the mode.** By default, the event goes to the consumers in memory after the commit. If the process stops
+   between the commit and the publish, the event is lost. When a lost event leaves other data wrong (for example, the
+   timeline or the search index), use **durable events** (T38):
+   1. In `AddDocumentsModule`, register the DbContext with the outbox:
+      `services.AddModuleDbContext<DocumentsDbContext>(DocumentsDbContext.SchemaName, database => database.UseDurableEvents());`
+   2. In `OnModelCreating`, call `modelBuilder.AddEventOutbox();` (namespace `Hestia.Platform.Events`). Then add a
+      migration (step 4): it adds the table `EventOutbox` to your schema.
+   3. Change nothing else. `RaiseEvent` and the save stay the same. The save stores the event in the outbox with the
+      change, and the host's outbox sender delivers it, also after a restart. Do not read or write the outbox rows.
+   4. Test it like the Sample module: `tests/Hestia.Modules.Sample.Tests/DurableEventTests.cs`. To test a restart, stop
+      the sender (`Events:Outbox:Enabled` = `false`), then use `factory.Restarted(...)`.
+4. Consume an event (from your module, another module, or finance) with a public class whose name ends in `Consumer`,
    with a public `Consume(TEvent message, CancellationToken cancellationToken)` method. Example:
    `SampleItemCreatedConsumer`.
-4. **Make each consumer idempotent.** An event can come more than once (RabbitMQ delivers again after a failure), and
+5. **Make each consumer idempotent.** An event can come more than once (RabbitMQ delivers again after a failure), and
    the consumer must change the data only once (T36). Use the module's event inbox:
    1. In `OnModelCreating` of your DbContext, call `modelBuilder.AddEventInbox();` (namespace `Hestia.Platform.Events`).
       Then add a migration (step 4): it adds the table `EventInbox` to your schema.
@@ -121,7 +132,7 @@ A module event tells other modules that something changed (D7). See the README, 
    - Two deliveries at the same time: one save fails on the inbox key, and its change does not commit. Wolverine
      handles the failure as any consumer error (a retry finds the inbox row and does nothing). The other delivery's
      change stays, so the data changes once.
-5. In tests, each `HestiaApiFactory` records what the consumers get: `await factory.Events.WaitForAsync<DocumentAdded>()`.
+6. In tests, each `HestiaApiFactory` records what the consumers get: `await factory.Events.WaitForAsync<DocumentAdded>()`.
    Add a test that delivers the same event twice and checks that the data changed once. Example:
    `tests/Hestia.Modules.Sample.Tests/IdempotentConsumerTests.cs`.
 

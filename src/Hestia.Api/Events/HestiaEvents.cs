@@ -28,6 +28,9 @@ public sealed class EventsOptions
     /// event, so a change in appsettings.json takes effect without a restart.
     /// </summary>
     public bool LogAll { get; set; }
+
+    /// <summary>The module outbox sender: durable module events (T38).</summary>
+    public OutboxOptions Outbox { get; set; } = new();
 }
 
 /// <summary>
@@ -45,9 +48,17 @@ public static class HestiaEvents
 {
     public static WebApplicationBuilder AddHestiaEvents(this WebApplicationBuilder builder, IReadOnlyList<IModule> modules)
     {
-        builder.Services.AddOptions<EventsOptions>().BindConfiguration(EventsOptions.SectionName);
-        // Before the modules register their DbContexts: the platform keeps this one (TryAdd).
+        builder.Services.AddOptions<EventsOptions>().BindConfiguration(EventsOptions.SectionName)
+            .Validate(options => options.Outbox.PollInterval > TimeSpan.Zero && options.Outbox.RetryDelay > TimeSpan.Zero,
+                $"{EventsOptions.SectionName}:Outbox:PollInterval and RetryDelay must be more than zero.")
+            .Validate(options => options.Outbox.MaxAttempts >= 1,
+                $"{EventsOptions.SectionName}:Outbox:MaxAttempts must be 1 or more.")
+            .ValidateOnStart();
+        // Before the modules register their DbContexts: the platform keeps these (TryAdd).
         builder.Services.AddScoped<IEventPublisher, WolverineEventPublisher>();
+        // Durable module events (T38): the outbox format, and the sender that delivers the rows.
+        builder.Services.AddSingleton<IModuleEventSerializer>(new ModuleEventSerializer(HestiaEvents.ModuleEventTypes(modules)));
+        builder.Services.AddHostedService<ModuleOutboxSender>();
         // The setup reads the Events settings when the host starts (an extension from the container), so it sees the
         // final configuration, test settings included.
         builder.Services.AddSingleton<IWolverineExtension>(services =>
@@ -58,9 +69,16 @@ public static class HestiaEvents
     }
 
     /// <summary>The finance events and the events in each module's <c>.Contracts</c> assembly.</summary>
-    public static IReadOnlyList<Type> EventTypes(IEnumerable<IModule> modules)
+    public static IReadOnlyList<Type> EventTypes(IEnumerable<IModule> modules) =>
+        FinanceEventTopology.EventTypes.Concat(ModuleEventTypes(modules))
+            .Distinct()
+            .OrderBy(type => type.FullName, StringComparer.Ordinal)
+            .ToList();
+
+    /// <summary>The events in each module's <c>.Contracts</c> assembly: the events that a module can raise.</summary>
+    public static IReadOnlyList<Type> ModuleEventTypes(IEnumerable<IModule> modules)
     {
-        var types = new List<Type>(FinanceEventTopology.EventTypes);
+        var types = new List<Type>();
         foreach (var module in modules)
         {
             var name = module.GetType().Assembly.GetName().Name + ".Contracts";
@@ -147,6 +165,9 @@ internal sealed class HestiaEventsSetup(
 /// </remarks>
 internal sealed class WolverineEventPublisher(IMessageBus bus) : IEventPublisher
 {
+    /// <summary>How long one outbox delivery can take (all consumers of one event).</summary>
+    internal static readonly TimeSpan DeliveryTimeout = TimeSpan.FromMinutes(1);
+
     public ValueTask PublishAsync(object @event, CancellationToken cancellationToken = default)
     {
         if (ExecutionContext.IsFlowSuppressed())
@@ -160,6 +181,13 @@ internal sealed class WolverineEventPublisher(IMessageBus bus) : IEventPublisher
         }
         return new ValueTask(publish);
     }
+
+    /// <summary>
+    /// Runs all consumers of the event in this call (Wolverine <c>InvokeAsync</c>), for the outbox sender (T38). The
+    /// sender runs outside any HTTP request, so the consumers see no request here either.
+    /// </summary>
+    public Task DeliverAsync(object @event, CancellationToken cancellationToken = default) =>
+        bus.InvokeAsync(@event, cancellationToken, DeliveryTimeout);
 }
 
 /// <summary>
