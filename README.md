@@ -89,7 +89,7 @@ Endpoints now:
 | Endpoint | Description |
 | --- | --- |
 | `GET /health/live` | The process answers. No sign-in. |
-| `GET /health/ready` | The host can serve requests: each module can connect to its database, and finance answers its `/health/ready`. No sign-in. |
+| `GET /health/ready` | The host can serve requests: each module can connect to its database, finance answers its `/health/ready`, and the host can write to the documents folder (`documents-storage`, T59). No sign-in. |
 | `POST /api/Auth/login`, `logout`, `change-password`, `sign-out-others`, `GET /api/Auth/me` | Identity module: sign-in (see [Sign-in](#sign-in)). |
 | `GET /api/sample/items?page=1&pageSize=20` | Sample module: a page of items. |
 | `POST /api/sample/items` | Sample module: make an item, `{ "name": "Kettle" }`. |
@@ -328,6 +328,34 @@ the rules are a Today provider (`DocumentsTodayCards`). They move to an Alerts s
 | `Expiry:SoonDays`, `Expiry:ExpiredDays` | `30`, `7` | The windows of the Today items. |
 
 The frontend's nginx must let large uploads through: its `client_max_body_size` must be at least `MaxUploadSizeMb`.
+
+**Readiness check `documents-storage` (T59).** `/health/ready` answers 503 when the folder in `Documents:StoragePath`
+does not exist, or when the host cannot write and delete a small file in its `tmp/` folder. In Docker, the cause is a
+missing volume, or a volume that belongs to another user (it must belong to uid 1654). `/health/live` does not run
+this check, so a volume problem does not restart the container. To see which check failed, read the log of the host:
+`docker compose logs hestia-api | grep -i "health check"`.
+
+**Unused files: `documents-clean-files` (T59).** A stop between a document delete and its file delete can leave a file
+that no document uses. A stopped upload can leave a file in `tmp/`. The command finds these files:
+
+- a document file (`ab/abcdef…`) that no `DocumentFiles` row uses;
+- a file in `tmp/`;
+- only when the file is older than one hour, so an upload in progress is safe. An upload of content that is stored
+  already gives the file a new time.
+
+Without `--delete`, it only prints the files. With `--delete`, it looks at each file again, then deletes it. It never
+touches other files on the volume (it prints them as `skipped`). The exit code is 1 when a delete failed.
+
+```bash
+docker compose run --rm -T hestia-api documents-clean-files            # list
+docker compose run --rm -T hestia-api documents-clean-files --delete   # delete
+```
+
+The host can run at the same time. Make a backup first if you are not sure (`docker compose exec backup backup.sh once`).
+
+**Errors.** A request body that cannot be read (for example `"kind": "Spaceship"`, or JSON that is not complete) gets
+400 with problem details, in Development and in Production. A body over the size limit of Kestrel gets 413, and a body
+with the wrong content type gets 415 (T59).
 
 ### OpenAPI document
 

@@ -4,6 +4,7 @@ using Hestia.Modules.Documents.Contracts;
 using Hestia.Modules.Documents.Endpoints;
 using Hestia.Modules.Documents.Infrastructure;
 using Hestia.Modules.Today.Contracts;
+using Hestia.Platform.Health;
 using Hestia.Platform.Modules;
 using Hestia.Platform.Persistence;
 using Microsoft.AspNetCore.Routing;
@@ -49,6 +50,10 @@ public static class DocumentsModuleExtensions
         // Durable events from the first migration (T38): Timeline (T16) and Search (T17) depend on them.
         services.AddModuleDbContext<DocumentsDbContext>(DocumentsDbContext.SchemaName, database => database.UseDurableEvents());
         services.AddSingleton<DocumentStorage>();
+        // T59: /health/ready checks that the host can write to the documents folder.
+        services.AddHealthChecks().AddCheck<DocumentStorageHealthCheck>(DocumentStorageHealthCheck.Name, tags: [HealthTags.Ready]);
+        // T59: removes the files that no document uses.
+        services.AddSingleton<IModuleCommand, CleanFilesCommand>();
         services.AddScoped<LinkTargets>();
         services.AddScoped<DocumentService>();
         services.AddScoped<IDocumentQueries, DocumentQueries>();

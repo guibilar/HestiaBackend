@@ -82,6 +82,10 @@ public sealed partial class DocumentStorage(IOptions<DocumentsOptions> options)
                 File.Move(temp, path, overwrite: true);
                 created = true;
             }
+            else
+            {
+                Touch(path);
+            }
             return new StoredFile(key, sha256, size, FileTypes.Detect(header.AsSpan(0, headerLength)), created);
         }
         finally
@@ -91,11 +95,30 @@ public sealed partial class DocumentStorage(IOptions<DocumentsOptions> options)
         }
     }
 
+    /// <summary>True when the text is a storage key: <c>ab/abcdef…</c> (lower-case hexadecimal).</summary>
+    public static bool IsKey(string key) => KeyFormat().IsMatch(key);
+
+    /// <summary>
+    /// A new upload of content that is stored already uses the old file. A new time keeps it safe from
+    /// <c>documents-clean-files</c> (it removes only old files) until the rows of the upload are saved.
+    /// </summary>
+    private static void Touch(string path)
+    {
+        try
+        {
+            File.SetLastWriteTimeUtc(path, DateTime.UtcNow);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // Only a protection against a clean-up at the same time.
+        }
+    }
+
     /// <summary>The full path of a stored file.</summary>
     /// <exception cref="ArgumentException">The key is not a storage key.</exception>
     public string PathOf(string key)
     {
-        if (!KeyFormat().IsMatch(key))
+        if (!IsKey(key))
         {
             throw new ArgumentException($"\"{key}\" is not a storage key.", nameof(key));
         }

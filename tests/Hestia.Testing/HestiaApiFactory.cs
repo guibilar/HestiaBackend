@@ -32,6 +32,11 @@ public class HestiaApiFactory(
     private readonly InMemoryDatabaseRoot _inMemoryRoot = new();
     private bool _createdDatabase;
 
+    // T59: a private documents folder for each host (a test can set its own Documents:StoragePath). The Documents
+    // readiness check needs the folder, and the tests do not write into the repository.
+    private readonly string _documentsPath = Path.Combine(Path.GetTempPath(), $"hestia-test-documents-{Guid.NewGuid():N}");
+    private bool _ownsDocumentsPath = true;
+
     /// <summary>A new host on the database of <paramref name="previous"/> (see <see cref="Restarted"/>).</summary>
     private HestiaApiFactory(HestiaApiFactory previous, IReadOnlyDictionary<string, string?>? newSettings,
         Action<IServiceCollection>? newServices, bool newSignedIn)
@@ -39,6 +44,7 @@ public class HestiaApiFactory(
     {
         _databaseName = previous._databaseName;
         _inMemoryRoot = previous._inMemoryRoot;
+        _documentsPath = previous._documentsPath;
     }
 
     /// <summary>
@@ -50,6 +56,7 @@ public class HestiaApiFactory(
         Action<IServiceCollection>? configureServices = null, bool signedIn = true)
     {
         _createdDatabase = false;
+        _ownsDocumentsPath = false;
         return new HestiaApiFactory(this, settings, configureServices, signedIn);
     }
 
@@ -78,6 +85,8 @@ public class HestiaApiFactory(
         // The test host runs in Development: no development account (a test makes the accounts that it needs).
         builder.UseSetting("Identity:InitialUser:Username", "");
         builder.UseSetting("Identity:InitialUser:Password", "");
+        Directory.CreateDirectory(_documentsPath);
+        builder.UseSetting("Documents:StoragePath", _documentsPath);
         foreach (var (key, value) in settings ?? new Dictionary<string, string?>())
         {
             builder.UseSetting(key, value);
@@ -112,6 +121,21 @@ public class HestiaApiFactory(
     public override async ValueTask DisposeAsync()
     {
         await base.DisposeAsync().ConfigureAwait(false);
+        if (_ownsDocumentsPath)
+        {
+            _ownsDocumentsPath = false;
+            try
+            {
+                if (Directory.Exists(_documentsPath))
+                {
+                    Directory.Delete(_documentsPath, recursive: true);
+                }
+            }
+            catch (IOException)
+            {
+                // A file can still be open for a moment; the temp folder is cleaned later.
+            }
+        }
         if (_createdDatabase && TestDatabase.PostgresServer is { } server)
         {
             _createdDatabase = false;
