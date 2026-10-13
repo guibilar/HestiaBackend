@@ -24,7 +24,8 @@ public static class SampleEndpoints
             return Results.Created($"{Prefix}/items/{item.Id}", item);
         });
 
-        // What the event consumer saw: SampleItemCreated reaches it after each item is committed.
-        endpoints.MapGet($"{Prefix}/activity", (SampleActivity activity) => activity.Read());
+        // What the event consumer handled: SampleItemCreated reaches it after each item is committed.
+        endpoints.MapGet($"{Prefix}/activity", (SampleActivityQueries activity, CancellationToken cancellationToken) =>
+            activity.ReadAsync(cancellationToken));
     }
 }

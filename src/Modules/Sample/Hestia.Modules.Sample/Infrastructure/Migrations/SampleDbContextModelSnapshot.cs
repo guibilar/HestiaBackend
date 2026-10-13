@@ -23,6 +23,28 @@ namespace Hestia.Modules.Sample.Infrastructure.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Hestia.Modules.Sample.Domain.SampleActivityEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTimeOffset>("ReceivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Activity", "sample");
+                });
+
             modelBuilder.Entity("Hestia.Modules.Sample.Domain.SampleItem", b =>
                 {
                     b.Property<Guid>("Id")
@@ -43,6 +65,23 @@ namespace Hestia.Modules.Sample.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("Items", "sample");
+                });
+
+            modelBuilder.Entity("Hestia.Platform.Events.InboxEntry", b =>
+                {
+                    b.Property<Guid>("EventId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Consumer")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTimeOffset>("HandledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("EventId", "Consumer");
+
+                    b.ToTable("EventInbox", "sample");
                 });
 #pragma warning restore 612, 618
         }

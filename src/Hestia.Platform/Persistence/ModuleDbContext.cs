@@ -1,3 +1,4 @@
+using Hestia.Platform.Events;
 using Microsoft.EntityFrameworkCore;
 
 namespace Hestia.Platform.Persistence;
@@ -29,6 +30,53 @@ public abstract class ModuleDbContext(DbContextOptions options, string schema) :
     {
         ArgumentNullException.ThrowIfNull(@event);
         _raised.Add(@event);
+    }
+
+    /// <summary>
+    /// The idempotency check of a consumer (T36). It returns false when <paramref name="consumer"/> handled the event
+    /// already: then do nothing. Else it adds an inbox row to this context and returns true: then make the change, and
+    /// save it with one <c>SaveChangesAsync</c>. The inbox row and the change commit together, or neither does.
+    /// </summary>
+    /// <param name="eventId">The <c>EventId</c> of the event.</param>
+    /// <param name="consumer">A stable name of the consumer, for example <c>Sample.SampleItemCreatedConsumer</c>. Do not
+    /// change it later: a consumer with a new name handles old events again.</param>
+    /// <param name="cancellationToken">Cancels the check.</param>
+    /// <remarks>
+    /// <list type="bullet">
+    /// <item>The module's model needs the inbox: call <c>modelBuilder.AddEventInbox()</c> in <c>OnModelCreating</c>.</item>
+    /// <item>Two deliveries of the same event at the same time: one save fails on the inbox key, and its change does
+    /// not commit. Wolverine handles that failure as any consumer failure (a retry gets false). The other delivery's
+    /// change stays, so the data changes once.</item>
+    /// <item>A consumer that must save more than once: put the saves in one transaction, with the execution strategy
+    /// (<c>Database.CreateExecutionStrategy()</c>), and call this method inside it.</item>
+    /// </list>
+    /// </remarks>
+    public async Task<bool> TryReceiveAsync(Guid eventId, string consumer, CancellationToken cancellationToken = default)
+    {
+        if (eventId == Guid.Empty)
+        {
+            throw new ArgumentException("The event has no EventId. The publisher must set it.", nameof(eventId));
+        }
+        ArgumentException.ThrowIfNullOrWhiteSpace(consumer);
+        if (consumer.Length > InboxEntry.MaxConsumerLength)
+        {
+            throw new ArgumentException($"The consumer name can have at most {InboxEntry.MaxConsumerLength} characters.", nameof(consumer));
+        }
+        if (Model.FindEntityType(typeof(InboxEntry)) is null)
+        {
+            throw new InvalidOperationException(
+                $"{GetType().Name} has no event inbox. Call modelBuilder.{nameof(EventInboxModelBuilderExtensions.AddEventInbox)}() " +
+                "in OnModelCreating, and add a migration.");
+        }
+
+        var inbox = Set<InboxEntry>();
+        if (inbox.Local.Any(e => e.EventId == eventId && e.Consumer == consumer) ||
+            await inbox.AnyAsync(e => e.EventId == eventId && e.Consumer == consumer, cancellationToken))
+        {
+            return false;
+        }
+        inbox.Add(new InboxEntry { EventId = eventId, Consumer = consumer, HandledAt = DateTimeOffset.UtcNow });
+        return true;
     }
 
     /// <summary>The events that this context holds and did not publish yet (raised or waiting for a commit).</summary>

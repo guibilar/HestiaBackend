@@ -1,4 +1,5 @@
 using Hestia.Modules.Sample.Domain;
+using Hestia.Platform.Events;
 using Hestia.Platform.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
@@ -11,6 +12,9 @@ public class SampleDbContext(DbContextOptions<SampleDbContext> options) : Module
 
     public DbSet<SampleItem> Items => Set<SampleItem>();
 
+    /// <summary>What the Sample consumer handled (SampleItemCreatedConsumer).</summary>
+    public DbSet<SampleActivityEntry> Activity => Set<SampleActivityEntry>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -22,6 +26,16 @@ public class SampleDbContext(DbContextOptions<SampleDbContext> options) : Module
             item.Property(i => i.Name).HasMaxLength(SampleItem.MaxNameLength).IsRequired();
             item.HasIndex(i => i.Name).IsUnique();
         });
+
+        modelBuilder.Entity<SampleActivityEntry>(entry =>
+        {
+            entry.ToTable("Activity");
+            entry.HasKey(e => e.Id);
+            entry.Property(e => e.Name).HasMaxLength(SampleItem.MaxNameLength).IsRequired();
+        });
+
+        // The inbox of the module's idempotent consumers (T36): the table "EventInbox" in this schema.
+        modelBuilder.AddEventInbox();
     }
 }
 

@@ -4,6 +4,7 @@ using Hestia.Contracts.Finance;
 using Hestia.Platform.Events;
 using Hestia.Platform.Finance;
 using Hestia.Platform.Modules;
+using Hestia.Platform.Persistence;
 using JasperFx;
 using Microsoft.Extensions.Options;
 using Wolverine;
@@ -50,7 +51,8 @@ public static class HestiaEvents
         // The setup reads the Events settings when the host starts (an extension from the container), so it sees the
         // final configuration, test settings included.
         builder.Services.AddSingleton<IWolverineExtension>(services =>
-            new HestiaEventsSetup(services.GetRequiredService<IConfiguration>(), modules));
+            new HestiaEventsSetup(services.GetRequiredService<IConfiguration>(), modules,
+                services.GetServices<ModuleDatabase>().ToList()));
         builder.UseWolverine(_ => { });
         return builder;
     }
@@ -72,7 +74,10 @@ public static class HestiaEvents
 }
 
 /// <summary>The Wolverine setup of the host: handler discovery, the debug consumer, and the RabbitMQ listener.</summary>
-internal sealed class HestiaEventsSetup(IConfiguration configuration, IReadOnlyList<IModule> modules) : IWolverineExtension
+internal sealed class HestiaEventsSetup(
+    IConfiguration configuration,
+    IReadOnlyList<IModule> modules,
+    IReadOnlyList<ModuleDatabase> databases) : IWolverineExtension
 {
     public void Configure(WolverineOptions wolverine)
     {
@@ -89,6 +94,12 @@ internal sealed class HestiaEventsSetup(IConfiguration configuration, IReadOnlyL
         // generated code. Wolverine 6 refuses service location by default, so a consumer that takes IFinanceClient
         // (with AsSystem, T42) would fail. Allow it for this one service.
         wolverine.CodeGeneration.AlwaysUseServiceLocationFor<IFinanceClient>();
+        // The same for each module DbContext (AddDbContext is a lambda registration too): an idempotent consumer takes
+        // its module's DbContext (T36).
+        foreach (var database in databases)
+        {
+            wolverine.CodeGeneration.AlwaysUseServiceLocationFor(database.ContextType);
+        }
 
         // Always registered, and quiet unless LogAll is on: the setting can change without a restart, and the set of
         // consumers does not depend on it.

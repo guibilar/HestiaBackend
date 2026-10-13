@@ -324,7 +324,7 @@ nothing. This path is not durable: if the process stops between the commit and t
 and sends it to the fanout exchange `hestia.finance-events` after the commit. The host binds its queue
 `hestia.api.finance-events` to that exchange and acknowledges a message only after its consumers finish. A consumer that
 fails gets the Wolverine retries, then the message goes to the dead-letter queue. A consumer can get an event more than
-once, so make each consumer idempotent. The events are in `Hestia.Contracts/Finance/FinanceEvents.cs`:
+once, so make each consumer idempotent (see below). The events are in `Hestia.Contracts/Finance/FinanceEvents.cs`:
 `TransactionsImported`, `TransactionChanged`, `BudgetLimitReached`, `BalanceRecorded`, and `SubscriptionPriceChanged`.
 
 **A consumer** is a Wolverine handler in a module project: a public class whose name ends in `Consumer`, with a public
@@ -337,6 +337,17 @@ public sealed class TransactionsImportedConsumer(ILogger<TransactionsImportedCon
     public void Consume(TransactionsImported message) => logger.LogInformation("{Added} new transactions", message.Added);
 }
 ```
+
+**Idempotent consumers (T36).** Each event has an `EventId` (`IIntegrationEvent`): a new GUID for each event, the same
+on each delivery of that event. A consumer that changes data uses its module's event inbox, the table `EventInbox` in
+the module's schema (event id, consumer name, handled at). `ModuleDbContext.TryReceiveAsync(eventId, consumer)` returns
+false when the consumer handled the event already; else it adds the inbox row to the context, and the consumer's one
+`SaveChangesAsync` commits the change and the row together. `SampleItemCreatedConsumer` is the template, and
+`docs/new-module.md` (step 6) tells a module author what to do. Wolverine's own durable inbox is not used: it does not
+cover the in-process module events, and its row is not in the same transaction as the module's change.
+
+An event from a publisher with an older `Hestia.Contracts` (before 1.1.0) has no `EventId` on the wire. The consumer
+then gets a new id for each delivery, so the inbox cannot see a second delivery of that event. Update the publisher.
 
 Settings (section `Events`):
 
