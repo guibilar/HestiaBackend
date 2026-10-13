@@ -40,6 +40,13 @@ public sealed class TodayEndpointTests
         }
         return new HestiaApiFactory(finance.HostSettings(all), configure =>
         {
+            // These tests look at the Money cards and at the providers that a test adds. The providers of other modules
+            // (Documents) have their own tests.
+            foreach (var provider in configure.Where(service => service.ServiceType == typeof(ITodayCardProvider) &&
+                         service.ImplementationType?.Namespace?.StartsWith("Hestia.Modules.Today.", StringComparison.Ordinal) == false).ToList())
+            {
+                configure.Remove(provider);
+            }
             if (now is { } moment)
             {
                 configure.RemoveAll<TimeProvider>();

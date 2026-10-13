@@ -5,6 +5,10 @@
     <Project Path="src/Hestia.Platform/Hestia.Platform.csproj" />
   </Folder>
   <Folder Name="/src/Modules/" />
+  <Folder Name="/src/Modules/Documents/">
+    <Project Path="src/Modules/Documents/Hestia.Modules.Documents/Hestia.Modules.Documents.csproj" />
+    <Project Path="src/Modules/Documents/Hestia.Modules.Documents.Contracts/Hestia.Modules.Documents.Contracts.csproj" />
+  </Folder>
   <Folder Name="/src/Modules/Identity/">
     <Project Path="src/Modules/Identity/Hestia.Modules.Identity/Hestia.Modules.Identity.csproj" />
     <Project Path="src/Modules/Identity/Hestia.Modules.Identity.Contracts/Hestia.Modules.Identity.Contracts.csproj" />
@@ -20,6 +24,7 @@
   <Folder Name="/tests/">
     <Project Path="tests/Hestia.Api.Tests/Hestia.Api.Tests.csproj" />
     <Project Path="tests/Hestia.Architecture.Tests/Hestia.Architecture.Tests.csproj" />
+    <Project Path="tests/Hestia.Modules.Documents.Tests/Hestia.Modules.Documents.Tests.csproj" />
     <Project Path="tests/Hestia.Modules.Identity.Tests/Hestia.Modules.Identity.Tests.csproj" />
     <Project Path="tests/Hestia.Modules.Sample.Tests/Hestia.Modules.Sample.Tests.csproj" />
     <Project Path="tests/Hestia.Modules.Today.Tests/Hestia.Modules.Today.Tests.csproj" />

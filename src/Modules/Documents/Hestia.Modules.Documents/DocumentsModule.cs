@@ -1,0 +1,74 @@
+using Hestia.Modules.Documents.Application;
+using Hestia.Modules.Documents.Application.Ocr;
+using Hestia.Modules.Documents.Contracts;
+using Hestia.Modules.Documents.Endpoints;
+using Hestia.Modules.Documents.Infrastructure;
+using Hestia.Modules.Today.Contracts;
+using Hestia.Platform.Modules;
+using Hestia.Platform.Persistence;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+
+namespace Hestia.Modules.Documents;
+
+/// <summary>
+/// The Documents module (T11): documents with their files on a volume, background OCR, full-text search, expiry dates,
+/// and links to finance transactions.
+/// </summary>
+public sealed class DocumentsModule : IModule
+{
+    public string Name => "Documents";
+
+    public void AddServices(IServiceCollection services, IConfiguration configuration) =>
+        services.AddDocumentsModule(configuration);
+
+    public void MapEndpoints(IEndpointRouteBuilder endpoints) =>
+        endpoints.MapDocumentsModule();
+}
+
+public static class DocumentsModuleExtensions
+{
+    /// <summary>Registers everything the Documents module needs, with one call.</summary>
+    public static IServiceCollection AddDocumentsModule(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.AddOptions<DocumentsOptions>()
+            .Bind(configuration.GetSection(DocumentsOptions.SectionName))
+            // A relative storage path is below the content root of the host.
+            .PostConfigure<IHostEnvironment>((options, environment) =>
+            {
+                if (!string.IsNullOrWhiteSpace(options.StoragePath))
+                {
+                    options.StoragePath = Path.GetFullPath(options.StoragePath, environment.ContentRootPath);
+                }
+            })
+            .Validate(options => options.IsValid(), DocumentsOptions.ValidationMessage)
+            .ValidateOnStart();
+
+        // Durable events from the first migration (T38): Timeline (T16) and Search (T17) depend on them.
+        services.AddModuleDbContext<DocumentsDbContext>(DocumentsDbContext.SchemaName, database => database.UseDurableEvents());
+        services.AddSingleton<DocumentStorage>();
+        services.AddScoped<LinkTargets>();
+        services.AddScoped<DocumentService>();
+        services.AddScoped<IDocumentQueries, DocumentQueries>();
+
+        // The OCR runs in the background (OcrWorker), not in the upload request.
+        services.AddSingleton<OcrSignal>();
+        services.AddSingleton<IOcrEngine, CommandLineOcrEngine>();
+        services.AddScoped<DocumentOcr>();
+        services.AddHostedService<OcrWorker>();
+        services.AddSingleton<IModuleCommand, RetryOcrCommand>();
+
+        // The expiry items on Today.
+        services.AddScoped<ITodayCardProvider, DocumentsTodayCards>();
+        return services;
+    }
+
+    /// <summary>Maps the Documents endpoints under /api/documents.</summary>
+    public static IEndpointRouteBuilder MapDocumentsModule(this IEndpointRouteBuilder endpoints)
+    {
+        DocumentEndpoints.Map(endpoints);
+        return endpoints;
+    }
+}

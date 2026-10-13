@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Internal: domain, application (storage, OCR), infrastructure, endpoints. Only the host references this project.
+       Other modules use Hestia.Modules.Documents.Contracts. -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Hestia.Platform\Hestia.Platform.csproj" />
+    <ProjectReference Include="..\Hestia.Modules.Documents.Contracts\Hestia.Modules.Documents.Contracts.csproj" />
+    <!-- The "expires soon" cards on Today (ITodayCardProvider). -->
+    <ProjectReference Include="..\..\Today\Hestia.Modules.Today.Contracts\Hestia.Modules.Today.Contracts.csproj" />
+  </ItemGroup>
+
+</Project>

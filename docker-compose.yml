@@ -38,6 +38,12 @@ services:
       Identity__InitialUser__ResetPassword: "${HESTIA_RESET_PASSWORD:-false}"
       # T03: optional. A bearer token that reads but changes nothing (scripts, an assistant). Empty turns it off.
       Identity__ReadOnlyToken: "${HESTIA_READONLY_TOKEN:-}"
+      # T11: the files of the Documents module, on the volume "hestia_documents" (D9).
+      Documents__StoragePath: /data/documents
+      # T11: the Tesseract language(s) of the OCR. The image has English (eng) only.
+      Documents__Ocr__Language: ${DOCUMENTS_OCR_LANGUAGE:-eng}
+    volumes:
+      - hestia_documents:/data/documents
     depends_on:
       hestia-db:
         condition: service_healthy
@@ -90,10 +96,14 @@ services:
       BACKUP_UID: ${BACKUP_UID:-999}
       BACKUP_GID: ${BACKUP_GID:-999}
       TZ: ${TZ:-America/Toronto}
+      # T11: the owner of the document files: the "app" user of the .NET image. restore.sh gives them back to it.
+      DOCUMENTS_OWNER: "1654:1654"
     volumes:
       # A volume name, or a folder on this machine (for example BACKUP_DIR=./backups).
       - ${BACKUP_DIR:-hestia_backups}:/backups
       - ./docker/backup.sh:/usr/local/bin/backup.sh:ro
+      # T11: the document files. Each dump gets a copy of them next to it (backup.sh), and restore.sh puts them back.
+      - hestia_documents:/documents
     depends_on:
       hestia-db:
         condition: service_healthy
@@ -117,3 +127,6 @@ volumes:
   # A fixed name, so it is easy to find: `docker volume inspect hestia_backups`.
   hestia_backups:
     name: hestia_backups
+  # T11: the files of the Documents module. The rows are in the database; backup.sh copies both.
+  hestia_documents:
+    name: hestia_documents
