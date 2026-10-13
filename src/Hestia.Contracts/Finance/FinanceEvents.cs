@@ -2,7 +2,7 @@ namespace Hestia.Contracts.Finance;
 
 // The events that the finance service publishes (D7). Finance writes each event to its outbox in the same database
 // transaction as the change, and sends it to RabbitMQ after the commit. A consumer can get an event more than once:
-// make each consumer idempotent.
+// make each consumer idempotent, with the EventId of the event (T36, the module event inbox).
 //
 // Money: amounts are in the account's currency (CAD), with two decimals. Dates without a time are the day in the
 // finance reporting time zone.
