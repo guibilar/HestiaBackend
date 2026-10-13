@@ -18,7 +18,10 @@ public sealed class OutboxOptions
     /// <summary>How often the sender reads the outboxes without a signal (a commit wakes it at once).</summary>
     public TimeSpan PollInterval { get; set; } = TimeSpan.FromSeconds(5);
 
-    /// <summary>The wait after the first failed delivery. It doubles after each failure, up to 10 minutes.</summary>
+    /// <summary>
+    /// The wait after the first failed delivery. It doubles after each failure, up to 10 minutes (or up to this value, if
+    /// it is more than 10 minutes).
+    /// </summary>
     public TimeSpan RetryDelay { get; set; } = TimeSpan.FromSeconds(5);
 
     /// <summary>After this many failed deliveries, the sender stops and keeps the row (with its last error).</summary>
@@ -207,15 +210,19 @@ internal sealed class ModuleOutboxSender(
         }
     }
 
-    /// <summary>The first delay, doubled for each failure after the first, up to 10 minutes.</summary>
+    /// <summary>
+    /// The first delay, doubled for each failure after the first, up to 10 minutes. A first delay of more than 10
+    /// minutes stays as it is.
+    /// </summary>
     internal static TimeSpan RetryDelay(TimeSpan first, int attempts)
     {
+        var limit = first > MaxRetryDelay ? first : MaxRetryDelay;
         var delay = first;
-        for (var i = 1; i < attempts && delay < MaxRetryDelay; i++)
+        for (var i = 1; i < attempts && delay < limit; i++)
         {
             delay *= 2;
         }
-        return delay < MaxRetryDelay ? delay : MaxRetryDelay;
+        return delay < limit ? delay : limit;
     }
 
     private async Task<bool> HostStartedAsync(CancellationToken stoppingToken)

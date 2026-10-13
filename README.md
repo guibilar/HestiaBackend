@@ -389,7 +389,7 @@ Settings (section `Events`):
 | `LogAll` | `false` (`true` in Development) | A debug consumer logs every event (finance and module events) with all its values. The host reads it for each event. Docker: `EVENTS_LOG_ALL`. |
 | `Outbox:Enabled` | `true` | The outbox sender of durable module events. `false` keeps the events in their outbox (for tests and diagnostics). Read at start. |
 | `Outbox:PollInterval` | `00:00:05` | How often the sender reads the outboxes without a commit signal. |
-| `Outbox:RetryDelay` | `00:00:05` | The wait after the first failed delivery of an event. It doubles after each failure, up to 10 minutes. |
+| `Outbox:RetryDelay` | `00:00:05` | The wait after the first failed delivery of an event. It doubles after each failure, up to 10 minutes (a longer value stays as it is). |
 | `Outbox:MaxAttempts` | `10` | After this many failed deliveries, the sender keeps the row and stops. |
 
 The broker runs in the finance project (its `events` profile), on the network `finance`. If the broker is down when the
