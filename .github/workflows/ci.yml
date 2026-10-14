@@ -173,9 +173,11 @@ jobs:
         run: |
           body=$(curl -sf http://localhost:5097/health/ready)
           echo "$body"
-          echo "$body" | jq -e '.status == "Healthy"'
-          echo "$body" | jq -e '[.checks[].name] | contains(["database", "finance", "documents-storage"])'
-          echo "$body" | jq -e 'all(.checks[]; .status == "Healthy" and (keys == ["name", "status"]))'
+          # Healthy, or Degraded when a check that can only warn does (for example the broker, T37).
+          echo "$body" | jq -e '.status == "Healthy" or .status == "Degraded"'
+          echo "$body" | jq -e '[.checks[] | select(.name == "database" or .name == "finance" or .name == "documents-storage")
+            | .status] == ["Healthy", "Healthy", "Healthy"]'
+          echo "$body" | jq -e 'all(.checks[]; keys == ["name", "status"])'
           echo "$body" | jq -e 'keys == ["checks", "status"]'
       # T03: health, sign-in, the session cookie, a module, finance (the stub), sign-out, and 401 without a session.
       - name: Smoke test (docker/smoke-test.sh)
