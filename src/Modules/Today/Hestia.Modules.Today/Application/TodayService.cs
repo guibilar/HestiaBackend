@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Security.Claims;
+using Hestia.Modules.Alerts.Contracts;
 using Hestia.Modules.Today.Contracts;
 using Hestia.Platform.Auth;
 using Hestia.Platform.Finance;
@@ -10,12 +11,14 @@ using Microsoft.Extensions.Options;
 namespace Hestia.Modules.Today.Application;
 
 /// <summary>
-/// Makes the Today answer: it calls every <see cref="ITodayCardProvider"/> at the same time, and puts the cards in
-/// module order. A provider that fails or does not answer in time gives no cards, and the answer marks its module as
-/// failed. A complete answer stays in a cache for each user for a short time.
+/// Makes the Today answer: it calls every <see cref="ITodayCardProvider"/> and reads the open alerts
+/// (<see cref="IAlertQueries"/>, T15) at the same time, and puts the cards in module order. The alerts of a module are its
+/// "Needs attention" items. A provider that fails or does not answer in time gives no cards, and the answer marks its
+/// module as failed. A complete answer stays in a cache for each user for a short time.
 /// </summary>
 public sealed class TodayService(
     IEnumerable<ITodayCardProvider> providers,
+    IAlertQueries alerts,
     IMemoryCache cache,
     IOptions<TodayOptions> options,
     TimeProvider time,
@@ -37,25 +40,47 @@ public sealed class TodayService(
         }
 
         var context = new TodayContext(date, timeZone, user);
-        var ordered = providers.OrderBy(p => p.Order).ThenBy(p => p.Module, StringComparer.Ordinal).ToList();
-        var results = await Task.WhenAll(ordered.Select(provider => RunAsync(provider, context, cancellationToken)));
+        var fromProviders = Task.WhenAll(providers.Select(provider => RunAsync(provider, context, cancellationToken)));
+        var fromAlerts = RunAlertsAsync(refresh, cancellationToken);
+        await Task.WhenAll(fromProviders, fromAlerts);
 
-        var cards = results.SelectMany(r => r.Cards).Where(card => card.Type == TodayCardType.Tile)
-            .Concat(results.SelectMany(r => r.Cards).Where(card => card.Type == TodayCardType.Attention))
+        // One entry per module: its provider and its alerts together.
+        var modules = fromProviders.Result.Concat(fromAlerts.Result)
+            .GroupBy(part => part.Module, StringComparer.Ordinal)
+            .Select(group => new ModuleResult(group.Key, group.Min(part => part.Order), Status(group.ToList()),
+                group.SelectMany(part => part.Cards).ToList()))
+            .OrderBy(module => module.Order)
+            .ThenBy(module => module.Module, StringComparer.Ordinal)
             .ToList();
-        var answer = new TodayDto(date, now, results.Select(r => new TodayModuleDto(r.Module, r.Status)).ToList(), cards);
+
+        var cards = modules.SelectMany(m => m.Cards).Where(card => card.Type == TodayCardType.Tile)
+            .Concat(modules.SelectMany(m => m.Cards).Where(card => card.Type == TodayCardType.Attention))
+            .ToList();
+        var answer = new TodayDto(date, now, modules.Select(m => new TodayModuleDto(m.Module, m.Status)).ToList(), cards);
 
         // Keep only a complete answer: after a failure, the next request tries again.
-        if (results.All(r => r.Status == TodayModuleStatus.Complete) && _options.CacheDuration > TimeSpan.Zero)
+        if (modules.All(m => m.Status == TodayModuleStatus.Complete) && _options.CacheDuration > TimeSpan.Zero)
         {
             cache.Set(key, answer, _options.CacheDuration);
         }
         return answer;
     }
 
-    private sealed record ProviderResult(string Module, TodayModuleStatus Status, IReadOnlyList<TodayCard> Cards);
+    /// <summary>One part of a module on Today: its provider, or its alerts.</summary>
+    private sealed record PartResult(string Module, int Order, TodayModuleStatus Status, IReadOnlyList<TodayCard> Cards);
 
-    private async Task<ProviderResult> RunAsync(ITodayCardProvider provider, TodayContext context, CancellationToken requestAborted)
+    private sealed record ModuleResult(string Module, int Order, TodayModuleStatus Status, IReadOnlyList<TodayCard> Cards);
+
+    /// <summary>
+    /// The status of a module from its parts: Complete when all parts are, Failed when all parts failed (then it has no
+    /// cards), else Partial.
+    /// </summary>
+    private static TodayModuleStatus Status(IReadOnlyList<PartResult> parts) =>
+        parts.All(part => part.Status == TodayModuleStatus.Complete) ? TodayModuleStatus.Complete
+        : parts.All(part => part.Status == TodayModuleStatus.Failed) ? TodayModuleStatus.Failed
+        : TodayModuleStatus.Partial;
+
+    private async Task<PartResult> RunAsync(ITodayCardProvider provider, TodayContext context, CancellationToken requestAborted)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(requestAborted);
         timeout.CancelAfter(_options.ProviderTimeout);
@@ -69,7 +94,8 @@ public sealed class TodayService(
             {
                 logger.LogWarning("Today: the {Module} provider gave cards of another module; they are left out", provider.Module);
             }
-            return new ProviderResult(provider.Module, result.Complete ? TodayModuleStatus.Complete : TodayModuleStatus.Partial, cards);
+            return new PartResult(provider.Module, provider.Order,
+                result.Complete ? TodayModuleStatus.Complete : TodayModuleStatus.Partial, cards);
         }
         catch (OperationCanceledException) when (requestAborted.IsCancellationRequested)
         {
@@ -78,19 +104,46 @@ public sealed class TodayService(
         catch (OperationCanceledException)
         {
             logger.LogWarning("Today: the {Module} provider did not answer in {Timeout}", provider.Module, _options.ProviderTimeout);
-            return new ProviderResult(provider.Module, TodayModuleStatus.Failed, []);
+            return new PartResult(provider.Module, provider.Order, TodayModuleStatus.Failed, []);
         }
         catch (FinanceRequestException exception)
         {
             // Finance is down: expected from time to time, and the finance client logged the details.
             logger.LogWarning("Today: the {Module} provider could not reach finance: {Message}", provider.Module, exception.Message);
-            return new ProviderResult(provider.Module, TodayModuleStatus.Failed, []);
+            return new PartResult(provider.Module, provider.Order, TodayModuleStatus.Failed, []);
         }
         catch (Exception exception)
         {
             logger.LogError(exception, "Today: the {Module} provider failed after {Elapsed} ms", provider.Module,
                 (int)Stopwatch.GetElapsedTime(started).TotalMilliseconds);
-            return new ProviderResult(provider.Module, TodayModuleStatus.Failed, []);
+            return new PartResult(provider.Module, provider.Order, TodayModuleStatus.Failed, []);
+        }
+    }
+
+    /// <summary>
+    /// The alerts of each module, as "Needs attention" cards, in the order of each module's rules (T15). With
+    /// <paramref name="refresh"/> (pull to refresh), the Alerts module checks the rules first.
+    /// </summary>
+    private async Task<IReadOnlyList<PartResult>> RunAlertsAsync(bool refresh, CancellationToken requestAborted)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(requestAborted);
+        timeout.CancelAfter(_options.ProviderTimeout);
+        try
+        {
+            var list = await alerts.GetOpenAsync(new AlertListOptions(refresh, AlertOrder.Module), timeout.Token);
+            return list.Modules
+                .Select(module => new PartResult(module.Module, module.Order, AlertCards.Status(module.Status),
+                    list.Alerts.Where(alert => alert.Module == module.Module).Select(AlertCards.Card).ToList()))
+                .ToList();
+        }
+        catch (OperationCanceledException) when (requestAborted.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            logger.LogError(exception, "Today: the alerts did not load");
+            return [];
         }
     }
 }

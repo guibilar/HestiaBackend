@@ -20,6 +20,7 @@ src/
                                     health check, reverse proxy setup, IModule, module database setup
   Hestia.Contracts/                 contracts shared with other processes (finance events), a NuGet package
   Modules/
+    Alerts/                         the "Needs attention" list of all modules: rules, store, /api/alerts (T15)
     Documents/                      documents: files on a volume, OCR, full-text search, expiry, links (T11)
     Identity/                       sign-in: users, sessions, the read-only token, /api/Auth (T03)
     Today/                          the Today screen: /api/today, the cards of all modules (T08)
@@ -31,6 +32,7 @@ tests/
   Hestia.Architecture.Tests/        the module rules
   Hestia.Platform.Tests/
   Hestia.Api.Tests/
+  Hestia.Modules.Alerts.Tests/
   Hestia.Modules.Documents.Tests/   with small sample files (Samples/) for the upload and OCR tests
   Hestia.Modules.Identity.Tests/
   Hestia.Modules.Sample.Tests/
@@ -95,6 +97,7 @@ Endpoints now:
 | `POST /api/sample/items` | Sample module: make an item, `{ "name": "Kettle" }`. |
 | `GET /api/sample/activity` | Sample module: what its event consumer saw since the host started (`itemsCreated`, `lastItemName`). |
 | `/api/documents/...` | Documents module: upload, list and search, download, links (see [Documents](#documents)). |
+| `GET /api/today`, `GET /api/alerts` | The Today screen (see [Today](#today)), and the open "Needs attention" items (see [Alerts](#alerts)). |
 | `/api/Accounts`, `/api/Transaction`, and the other finance paths | Proxied to the finance backend, with a gateway token. |
 
 All endpoints except the sign-in and the health checks need a signed-in user.
@@ -219,17 +222,16 @@ public sealed class BudgetAlertConsumer(IFinanceClient finance)
 The Today module (T08) gives the Today screen of both clients all its cards in one answer: `GET /api/today`. The card
 logic is in one place, here, and not in the web and Android clients.
 
-- Each module that shows cards registers an `ITodayCardProvider` (`Hestia.Modules.Today.Contracts`). The Today module
-  calls all providers at the same time, inside the request of the user. See [docs/new-module.md](docs/new-module.md).
-- **Finance (Money) comes first** (D11). Its provider is in the Today module, because finance is a separate service. It
-  reads eight finance reports with `IFinanceClient`, as the signed-in user, and never reads the finance database:
-  - four tiles: spent this month (against a usual month by now, or against last month so far in January), left over
-    this month, net worth and its change since last month, and budgets over their limit;
-  - the "Needs attention" items: budgets over their limit, no statement import for more than 7 days, accounts whose
-    statements stop before last month, price changes of the last 45 days, and transactions that no rule sorts.
-
-  The rules are the same as the web dashboard (`dashboard-stats.ts`, `attention.ts`) and the Android app
-  (`core/logic/Attention.kt`).
+- **Tiles.** Each module that shows tiles registers an `ITodayCardProvider` (`Hestia.Modules.Today.Contracts`). The
+  Today module calls all providers at the same time, inside the request of the user. See [docs/new-module.md](docs/new-module.md).
+- **"Needs attention" items** come from the Alerts module (T15, see [Alerts](#alerts)): Today reads the open alerts of
+  all modules (`IAlertQueries`) at the same time as the tiles. The card ids, texts, values, and links did not change
+  with T15, so the clients need no change.
+- **Finance (Money) comes first** (D11). Its tile provider is in the Today module, because finance is a separate
+  service. It reads five finance reports with `IFinanceClient`, as the signed-in user, and never reads the finance
+  database. The four tiles: spent this month (against a usual month by now, or against last month so far in January),
+  left over this month, net worth and its change since last month, and budgets over their limit. The rules are the same
+  as the web dashboard (`dashboard-stats.ts`).
 - **Links.** Each card can have a `link`, a client route (D11). The clients keep the query string and the fragment.
 
   | Card | Link |
@@ -242,9 +244,11 @@ logic is in one place, here, and not in the web and Android clients.
   | Document that expires or expired | `/documents/<id>` |
 - **Failures:** a provider that throws, or does not answer in `Today:ProviderTimeout`, gives no cards. Its module has
   the status `Failed`, and the answer is still 200. When one finance report does not load, its tile has no value and
-  the text "Could not load this", and the module has the status `Partial`.
+  the text "Could not load this", and the module has the status `Partial`. The status of a module includes its alerts:
+  `Complete` when the tiles and the last alert check are complete, `Failed` when both failed (then it has no cards),
+  else `Partial`.
 - **Cache:** a complete answer stays for `Today:CacheDuration` (30 seconds), for each user and scope.
-  `GET /api/today?refresh=true` makes a new one (for pull to refresh).
+  `GET /api/today?refresh=true` makes a new one (for pull to refresh), and also checks the alert rules first.
 - **Formatting is the client's job.** A card text has placeholders, for example `{difference} under a usual month by
   now`, and the card's `values` give each one with its type (`Money`, `Count`, `Percent`, `Date`, `Text`). So the
   clients keep their own currency and date formats, and privacy mode hides the amounts.
@@ -255,6 +259,51 @@ logic is in one place, here, and not in the web and Android clients.
 | `TimeZone` | `America/Toronto` | The IANA time zone that decides which day it is. Use the same zone as finance (`Reports:TimeZone`), so "this month" is the same month. Docker: `TZ` in `.env`. |
 | `CacheDuration` | `00:00:30` | How long a complete answer stays for a user. `00:00:00` turns the cache off. |
 | `ProviderTimeout` | `00:00:15` | How long the host waits for one module's cards. |
+
+## Alerts
+
+The Alerts module (T15, schema `alerts`) owns the "Needs attention" list of all modules. Today shows it, and the clients
+can poll it (`GET /api/alerts`, for example for Android notifications later).
+
+```
+module rules (IAlertSource) ──check──> alert store (raise, update, resolve) ──> Today, GET /api/alerts
+        ^ timer, refresh, finance events, module events
+```
+
+- **Sources.** Each module adds its rules as an `IAlertSource` (`Hestia.Modules.Alerts.Contracts`). A check returns the
+  alerts that hold now, and the key prefixes that it looked at completely (`Covered`). Two sources now:
+  - `Money.Finance`, in this module, because finance is a separate service. It reads four finance reports as the
+    **system identity**, read-only (`AsSystem("Alerts.FinanceAlertSource")`, T42): budgets over their limit, no
+    statement import for more than 7 days, accounts whose statements stop before last month, price changes of the last
+    45 days, and transactions that no rule sorts. The rules are the same as the web dashboard (`attention.ts`) and the
+    Android app (`core/logic/Attention.kt`). They were in the Today module until T15.
+  - `Documents.Expiry`, in the Documents module (see [Documents](#documents)).
+- **The store.** One row per alert. The key is the Today card id (for example `money.budget-over.<budget id>`), so the
+  same condition has one open alert. A check that finds a new key raises an alert; a known key with a new text, value,
+  or severity is updated (`updatedAt`); an open key that the check covers but did not find is resolved (`resolvedAt`).
+  When the condition comes back, it is a new alert with a new `alertId`. A report that does not load covers nothing,
+  so its alerts stay as they are. Resolved alerts stay for `Alerts:KeepResolvedDays`, then the timer deletes them.
+- **When the rules run.** Always in the background (`AlertsWorker`), never in the request of a user:
+  - every `Alerts:CheckInterval` (15 minutes): for rules without an event, for example a document that starts to expire;
+  - when Today or `GET /api/alerts` asks with `refresh=true`, or when a source has no complete check since the host
+    started (for example the first request after a start). The request waits at most `Alerts:RefreshWait`, then gets
+    the stored alerts;
+  - after each finance event (`FinanceAlertsConsumer`). Several events before the check starts give one check.
+    `BudgetLimitReached` at 100 % also raises its alert at once, from the event (with the inbox, T36);
+  - after a module event, when the module asks for it (`IAlertChecks.CheckAsync`, for example `DocumentAlertsConsumer`).
+- **`GET /api/alerts?refresh=false`** answers `{ checkedAt, modules, alerts }`. Each alert has the fields of a Today
+  attention card (`id`, `module`, `type`, `kind`, `title`, `text`, `values`, `severity`, `link`), and `alertId`,
+  `raisedAt`, and `updatedAt`. Most severe first, then newest first. A read-only user can call it (a GET).
+- **Module status.** `Complete` when the last check of each source of the module was complete; `Partial` when a report
+  did not load, or when the checks failed but the module has stored alerts (they can be old); `Failed` when no check
+  worked since the host started and the module has no alerts.
+
+| Setting (`Alerts` section) | Default | Description |
+| --- | --- | --- |
+| `TimeZone` | `America/Toronto` | The IANA time zone that decides which day it is for the rules. Use the same zone as Today and finance. Docker: `TZ` in `.env`. |
+| `CheckInterval` | `00:15:00` | How often the host checks all rules without a request. |
+| `RefreshWait` | `00:00:10` | How long a request for fresh alerts waits for the check. Keep it under `Today:ProviderTimeout`. |
+| `KeepResolvedDays` | `30` | How long a resolved alert stays in the table. |
 
 ## Documents
 
@@ -320,9 +369,11 @@ Finance down: 502.
 `DocumentLinked`, and `DocumentUnlinked`, in `Hestia.Modules.Documents.Contracts`. A delete sends `DocumentUnlinked`
 for each link first. Other modules read more with `IDocumentQueries` (`FindAsync`, `ListByLinkAsync`).
 
-**Today.** A "Needs attention" item for each document that expires in the next 30 days, or expired in the last 7
-days (`documents.expiring.<id>`, `documents.expired.<id>`, link `/documents/<id>`). T15 (Alerts) is not merged yet, so
-the rules are a Today provider (`DocumentsTodayCards`). They move to an Alerts source when the Alerts module comes.
+**Alerts (T15).** An alert for each document that expires in the next 30 days, or expired in the last 7 days
+(`documents.expiring.<id>`, `documents.expired.<id>`, link `/documents/<id>`). Today shows them as "Needs attention"
+items. The rules are an alert source in this module (`DocumentExpiryAlerts`). After `DocumentAdded`, `DocumentChanged`
+(details), and `DocumentDeleted`, the consumer `DocumentAlertsConsumer` checks that one document. The timer of the
+Alerts module checks all documents (a document starts to expire because time passes).
 
 | Setting (`Documents` section) | Default | Description |
 | --- | --- | --- |
@@ -335,7 +386,7 @@ the rules are a Today provider (`DocumentsTodayCards`). They move to an Alerts s
 | `Ocr:Language` | `eng` | The Tesseract language(s). Docker: `DOCUMENTS_OCR_LANGUAGE`. |
 | `Ocr:Timeout` | `00:10:00` | The longest OCR of one file. |
 | `Ocr:PollInterval` | `00:01:00` | How often the worker looks for `Pending` documents without an upload signal. |
-| `Expiry:SoonDays`, `Expiry:ExpiredDays` | `30`, `7` | The windows of the Today items. |
+| `Expiry:SoonDays`, `Expiry:ExpiredDays` | `30`, `7` | The windows of the expiry alerts. |
 
 The frontend's nginx must let large uploads through: its `client_max_body_size` must be at least `MaxUploadSizeMb`.
 

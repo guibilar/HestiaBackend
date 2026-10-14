@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Public: the alert source interface (each module adds its rules), the alert values, and the query interface
+       (Today reads the "Needs attention" items through it). It references only Hestia.Platform and Hestia.Contracts. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Hestia.Platform\Hestia.Platform.csproj" />
+  </ItemGroup>
+
+</Project>

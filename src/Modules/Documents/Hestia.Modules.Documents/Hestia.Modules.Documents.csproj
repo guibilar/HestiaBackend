@@ -9,8 +9,8 @@
   <ItemGroup>
     <ProjectReference Include="..\..\..\Hestia.Platform\Hestia.Platform.csproj" />
     <ProjectReference Include="..\Hestia.Modules.Documents.Contracts\Hestia.Modules.Documents.Contracts.csproj" />
-    <!-- The "expires soon" cards on Today (ITodayCardProvider). -->
-    <ProjectReference Include="..\..\Today\Hestia.Modules.Today.Contracts\Hestia.Modules.Today.Contracts.csproj" />
+    <!-- The expiry alerts (IAlertSource, IAlertChecks; T15). Today shows them through the Alerts module. -->
+    <ProjectReference Include="..\..\Alerts\Hestia.Modules.Alerts.Contracts\Hestia.Modules.Alerts.Contracts.csproj" />
   </ItemGroup>
 
 </Project>

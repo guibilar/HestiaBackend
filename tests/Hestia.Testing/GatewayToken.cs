@@ -50,4 +50,12 @@ public sealed record GatewayToken(string Subject, string Name, string Scope, Tim
         }
         return Validate(header[bearer.Length..]);
     }
+
+    /// <summary>
+    /// The subject of the gateway token of a request, without the checks of <see cref="Read"/>. For tests with a fixed
+    /// clock, whose tokens are not valid at the real time: for example to tell user requests from system requests.
+    /// </summary>
+    public static string SubjectOf(FinanceRequest request) =>
+        new JsonWebToken(request.Header("Authorization")?["Bearer ".Length..]
+            ?? throw new InvalidOperationException($"{request.Method} {request.Target} reached finance without a token.")).Subject;
 }

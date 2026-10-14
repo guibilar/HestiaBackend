@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using Hestia.Modules.Alerts.Contracts;
 using Hestia.Modules.Today.Contracts;
 using Hestia.Testing;
 using Microsoft.Extensions.DependencyInjection;
@@ -7,7 +8,11 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Hestia.Modules.Today.Tests;
 
-/// <summary>GET /api/today through the real host, with the finance reports from <see cref="FakeFinance"/>.</summary>
+/// <summary>
+/// GET /api/today through the real host, with the finance reports from <see cref="FakeFinance"/>. The tiles come from the
+/// Today module (as the signed-in user); the "Needs attention" items come from the Alerts module (T15), which reads its
+/// reports as the system identity.
+/// </summary>
 public sealed class TodayEndpointTests
 {
     private const string Today = "/api/today";
@@ -40,12 +45,17 @@ public sealed class TodayEndpointTests
         }
         return new HestiaApiFactory(finance.HostSettings(all), configure =>
         {
-            // These tests look at the Money cards and at the providers that a test adds. The providers of other modules
-            // (Documents) have their own tests.
+            // These tests look at the Money cards and at the providers that a test adds. The providers and alert sources of
+            // other modules (Documents) have their own tests.
             foreach (var provider in configure.Where(service => service.ServiceType == typeof(ITodayCardProvider) &&
                          service.ImplementationType?.Namespace?.StartsWith("Hestia.Modules.Today.", StringComparison.Ordinal) == false).ToList())
             {
                 configure.Remove(provider);
+            }
+            foreach (var source in configure.Where(service => service.ServiceType == typeof(IAlertSource) &&
+                         service.ImplementationType?.Namespace?.StartsWith("Hestia.Modules.Alerts.", StringComparison.Ordinal) == false).ToList())
+            {
+                configure.Remove(source);
             }
             if (now is { } moment)
             {
@@ -145,7 +155,7 @@ public sealed class TodayEndpointTests
     }
 
     [Fact]
-    public async Task FinanceRequests_UseTheSignedInUser_AndTheBudgetQueryAsksForAllActiveBudgets()
+    public async Task TheTiles_UseTheSignedInUser_TheAlerts_TheSystemIdentity_AndTheBudgetQueryAsksForAllActiveBudgets()
     {
         var data = new FinanceData();
         await using var finance = await FakeFinance.StartAsync(data.RespondAsync);
@@ -154,12 +164,21 @@ public sealed class TodayEndpointTests
 
         await GetTodayAsync(factory.CreateClient());
 
-        Assert.Equal(FinanceData.Paths.Order(), finance.Requests.Select(r => $"{r.Method} {r.Target}").Order());
-        Assert.All(finance.Requests, request =>
+        var user = FinanceData.UserRequests(finance);
+        Assert.Equal(FinanceData.TilePaths.Order(), user.Select(r => $"{r.Method} {r.Target}").Order());
+        Assert.All(user, request =>
             Assert.Equal((TestSignIn.UserId, "full"), (GatewayToken.Read(request).Subject, GatewayToken.Read(request).Scope)));
-        var filter = JsonDocument.Parse(Assert.Single(finance.Requests, r => r.Method == "POST").Body).RootElement;
-        Assert.Equal(("Active", 1, 1000),
-            (filter.GetProperty("status").GetString(), filter.GetProperty("page").GetInt32(), filter.GetProperty("pageSize").GetInt32()));
+        // T15: the attention items come from the Alerts module, which reads finance in the background, read-only.
+        var system = FinanceData.SystemRequests(finance);
+        Assert.Equal(FinanceData.AlertPaths.Order(), system.Select(r => $"{r.Method} {r.Target}").Order());
+        Assert.All(system, request =>
+            Assert.Equal(("system:Alerts.FinanceAlertSource", "read-only"), (GatewayToken.Read(request).Name, GatewayToken.Read(request).Scope)));
+        Assert.All(finance.Requests.Where(r => r.Method == "POST"), request =>
+        {
+            var filter = JsonDocument.Parse(request.Body).RootElement;
+            Assert.Equal(("Active", 1, 1000),
+                (filter.GetProperty("status").GetString(), filter.GetProperty("page").GetInt32(), filter.GetProperty("pageSize").GetInt32()));
+        });
     }
 
     [Fact]
@@ -176,6 +195,7 @@ public sealed class TodayEndpointTests
         Assert.Equal(TodayModuleStatus.Complete, Assert.Single(today.Modules).Status);
         Assert.NotEmpty(finance.Requests);
         Assert.All(finance.Requests, request => Assert.Equal("read-only", GatewayToken.Read(request).Scope));
+        Assert.Contains(today.Cards, card => card.Type == TodayCardType.Attention);
     }
 
     [Fact]
@@ -276,36 +296,46 @@ public sealed class TodayEndpointTests
         var client = factory.CreateClient();
         var readOnly = factory.CreateClient();
         readOnly.DefaultRequestHeaders.Add(TestSignIn.ReadOnlyHeader, "yes");
-        var perAnswer = FinanceData.Paths.Length;
+        var tiles = FinanceData.TilePaths.Length;
+        var alerts = FinanceData.AlertPaths.Length;
 
+        // The first answer: the tiles, and the first alert check since the start.
         var first = await GetTodayAsync(client);
         var second = await GetTodayAsync(client);
-        Assert.Equal(perAnswer, finance.Requests.Count);
+        Assert.Equal((tiles, alerts), (FinanceData.UserRequests(finance).Count, FinanceData.SystemRequests(finance).Count));
         Assert.Equal(first.GeneratedAt, second.GeneratedAt);
 
-        // The read-only scope has its own answer.
+        // The read-only scope has its own answer. The alerts are stored: no new check.
         await GetTodayAsync(readOnly);
-        Assert.Equal(2 * perAnswer, finance.Requests.Count);
+        Assert.Equal((2 * tiles, alerts), (FinanceData.UserRequests(finance).Count, FinanceData.SystemRequests(finance).Count));
 
-        await GetTodayAsync(client, $"{Today}?refresh=true");
-        Assert.Equal(3 * perAnswer, finance.Requests.Count);
+        // Pull to refresh: new tiles, and a new alert check.
+        var refreshed = await GetTodayAsync(client, $"{Today}?refresh=true");
+        Assert.Equal((3 * tiles, 2 * alerts), (FinanceData.UserRequests(finance).Count, FinanceData.SystemRequests(finance).Count));
+        Assert.Equal(first.Cards.Select(card => card.Id), refreshed.Cards.Select(card => card.Id));
     }
 
     [Fact]
-    public async Task APartialAnswer_IsNotKept()
+    public async Task APartialAnswer_IsNotKept_AndThePartialAlertsAreCheckedAgain()
     {
         var data = new FinanceData();
+        // Only the alert rules read the accounts.
         data.Failures["GET /api/Accounts"] = 500;
         await using var finance = await FakeFinance.StartAsync(data.RespondAsync);
         await using var factory = Host(finance, FinanceData.Now);
         var client = factory.CreateClient();
 
-        await GetTodayAsync(client);
+        var first = await GetTodayAsync(client);
+        Assert.Equal(TodayModuleStatus.Partial, Assert.Single(first.Modules).Status);
+        Assert.DoesNotContain(first.Cards, card => card.Kind is "statements-behind" or "statements-not-imported");
+
         data.Failures.Clear();
         var second = await GetTodayAsync(client);
 
         Assert.Equal(TodayModuleStatus.Complete, Assert.Single(second.Modules).Status);
-        Assert.Equal(2 * FinanceData.Paths.Length, finance.Requests.Count);
+        Assert.Contains(second.Cards, card => card.Kind == "statements-behind");
+        Assert.Equal((2 * FinanceData.TilePaths.Length, 2 * FinanceData.AlertPaths.Length),
+            (FinanceData.UserRequests(finance).Count, FinanceData.SystemRequests(finance).Count));
     }
 
     [Fact]

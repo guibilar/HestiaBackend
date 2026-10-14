@@ -1,9 +1,9 @@
+using Hestia.Modules.Alerts.Contracts;
 using Hestia.Modules.Documents.Application;
 using Hestia.Modules.Documents.Application.Ocr;
 using Hestia.Modules.Documents.Contracts;
 using Hestia.Modules.Documents.Endpoints;
 using Hestia.Modules.Documents.Infrastructure;
-using Hestia.Modules.Today.Contracts;
 using Hestia.Platform.Health;
 using Hestia.Platform.Modules;
 using Hestia.Platform.Persistence;
@@ -65,8 +65,9 @@ public static class DocumentsModuleExtensions
         services.AddHostedService<OcrWorker>();
         services.AddSingleton<IModuleCommand, RetryOcrCommand>();
 
-        // The expiry items on Today.
-        services.AddScoped<ITodayCardProvider, DocumentsTodayCards>();
+        // The expiry rules (T15): the Alerts module runs them, and Today shows their alerts. After a document event,
+        // DocumentAlertsConsumer checks that document (Wolverine finds it; it needs no registration).
+        services.AddScoped<IAlertSource, DocumentExpiryAlerts>();
         return services;
     }
 

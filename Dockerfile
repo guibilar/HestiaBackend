@@ -7,6 +7,8 @@ COPY ["src/Hestia.Api/Hestia.Api.csproj", "src/Hestia.Api/"]
 COPY ["src/Hestia.Platform/Hestia.Platform.csproj", "src/Hestia.Platform/"]
 COPY ["src/Hestia.Contracts/Hestia.Contracts.csproj", "src/Hestia.Contracts/"]
 # Modules: two lines per module (see docs/new-module.md).
+COPY ["src/Modules/Alerts/Hestia.Modules.Alerts/Hestia.Modules.Alerts.csproj", "src/Modules/Alerts/Hestia.Modules.Alerts/"]
+COPY ["src/Modules/Alerts/Hestia.Modules.Alerts.Contracts/Hestia.Modules.Alerts.Contracts.csproj", "src/Modules/Alerts/Hestia.Modules.Alerts.Contracts/"]
 COPY ["src/Modules/Documents/Hestia.Modules.Documents/Hestia.Modules.Documents.csproj", "src/Modules/Documents/Hestia.Modules.Documents/"]
 COPY ["src/Modules/Documents/Hestia.Modules.Documents.Contracts/Hestia.Modules.Documents.Contracts.csproj", "src/Modules/Documents/Hestia.Modules.Documents.Contracts/"]
 COPY ["src/Modules/Identity/Hestia.Modules.Identity/Hestia.Modules.Identity.csproj", "src/Modules/Identity/Hestia.Modules.Identity/"]

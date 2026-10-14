@@ -136,14 +136,15 @@ A module event tells other modules that something changed (D7). See the README, 
    Add a test that delivers the same event twice and checks that the data changed once. Example:
    `tests/Hestia.Modules.Sample.Tests/IdempotentConsumerTests.cs`.
 
-## 7. Cards on Today (when the module has them)
+## 7. Tiles on Today (when the module has them)
 
-The Today screen shows cards from all modules (T08, see the README, section "Today").
+The Today screen shows cards from all modules (T08, see the README, section "Today"). A tile (a headline number) comes
+from a Today provider. A "Needs attention" item is an alert: see step 8.
 
 1. In the internal `.csproj`, add a `ProjectReference` to `Hestia.Modules.Today.Contracts`.
 2. Add a class that implements `ITodayCardProvider`: `Module` is your module name, `Order` is 100 or more (Money is 0).
-   Return `TodayCard` items: `Type` is `Tile` (a headline number) or `Attention` (a "Needs attention" item). Use your
-   module name in `Module`, and start each `Id` with the lower-case module name, for example `documents.expiring.<id>`.
+   Return `TodayCard` items with `Type` `Tile`. Use your module name in `Module`, and start each `Id` with the
+   lower-case module name, for example `tasks.due-today`.
 3. Do not format amounts or dates in a text. Put a placeholder in the text (`{amount}`) and its value in `Values`
    (`TodayValue.Money(...)`, `TodayValue.Day(...)`): the clients format them.
 4. Register it in `AddServices`: `services.AddScoped<ITodayCardProvider, DocumentsTodayCards>();`.
@@ -151,7 +152,32 @@ The Today screen shows cards from all modules (T08, see the README, section "Tod
    modules. If only a part of your data loads, return the cards that you have with `Complete: false`.
 6. Test it through `GET /api/today` with `HestiaApiFactory`.
 
-## 8. Tips from the Documents module (T11)
+## 8. "Needs attention" items: alerts (when the module has them)
+
+The Alerts module (T15, see the README, section "Alerts") keeps one list of the things that need attention, from all
+modules. Today shows it, and the clients can poll it. The Documents module is the example (`DocumentExpiryAlerts`,
+`DocumentAlertsConsumer`).
+
+1. In the internal `.csproj`, add a `ProjectReference` to `Hestia.Modules.Alerts.Contracts`.
+2. Add a class that implements `IAlertSource`, and register it in `AddServices`:
+   `services.AddScoped<IAlertSource, DocumentExpiryAlerts>();`
+   - `Name` is `<Module>.<Rules>`, for example `Documents.Expiry`. Do not change it later.
+   - `Module` is your module name, and `Order` its place on Today (100 or more; Money is 0).
+   - `CheckAsync` returns the alerts that hold now (`AlertCandidate`), and `Covered`: the key prefixes that it looked at
+     completely. An open alert with a covered key that the check did not give is resolved. When a part of your data
+     does not load, leave its prefixes out (and set `Complete` to false): its alerts then stay as they are.
+3. Each alert `Key` is stable for one condition, and starts with the lower-case module name and a dot, for example
+   `documents.expiring.<id>`. It is the card id on Today. Use placeholders and `Values` for amounts and dates, as for
+   Today cards (`AlertValue.Money(...)`, `AlertValue.Day(...)`). The `SortKey` gives the order inside your module.
+4. The Alerts module runs your source in the background: on its timer, and when Today or `GET /api/alerts` asks for
+   fresh alerts. A source never runs in the request of a user. To call finance, use `IFinanceClient.AsSystem(...)`.
+5. To react to your own events at once, add a consumer that calls `IAlertChecks.CheckAsync(source, target, trigger)`:
+   `target` is the id of the one thing that changed (your source then checks and covers only its keys), and `trigger`
+   is `new AlertTrigger(message.EventId, "<Module>.<Class>")`. The Alerts module stores the event in its inbox with the
+   result (T36), so the same event twice changes nothing.
+6. Test the rules alone, and test the alerts through `GET /api/alerts` (and `GET /api/today` for the Today items).
+
+## 9. Tips from the Documents module (T11)
 
 - **A model part for PostgreSQL only** (for example a `tsvector` column): check the provider in `OnModelCreating`
   with `if (Database.IsNpgsql()) { ... } else { entity.Ignore(...); }`. The migrations and the architecture tests use
@@ -165,8 +191,9 @@ The Today screen shows cards from all modules (T08, see the README, section "Tod
 - **Background work in a module:** a `BackgroundService` (`services.AddHostedService<...>()`) with a new service scope
   for each unit of work. Keep the state of the work in the module's tables (for example a status column), so a
   restart loses nothing.
-- **Today tests:** a new `ITodayCardProvider` adds a module to every `GET /api/today`. The Today tests leave out the
-  providers of other modules; test your provider in your module's tests, and read only your module's cards.
+- **Today tests:** a new `ITodayCardProvider` or `IAlertSource` adds a module to every `GET /api/today`. The Today and
+  Alerts tests leave out the providers and sources of other modules; test yours in your module's tests, and read only
+  your module's cards and alerts.
 - **JSON with enums in tests:** the host reads enums by name only. Send a request body with
   `PutAsJsonAsync(url, body, HestiaApiFactory.Json)`.
 - **A readiness check (T59):** a module that needs something outside the database (for example a folder) adds its own
@@ -177,7 +204,7 @@ The Today screen shows cards from all modules (T08, see the README, section "Tod
 - **Times in tests:** PostgreSQL keeps microseconds, .NET keeps 100 ns. Compare a time that went through the database
   with a time from the database, not with the value that the code made.
 
-## 9. Check
+## 10. Check
 
 - `dotnet build` has no warnings.
 - `dotnet test` passes, with the architecture tests.

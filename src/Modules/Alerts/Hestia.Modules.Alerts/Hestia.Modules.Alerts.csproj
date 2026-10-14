@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Internal: the alert store, the background checks, the finance rules, and /api/alerts. Only the host references
+       this project. Other modules use Hestia.Modules.Alerts.Contracts (IAlertSource, IAlertChecks, IAlertQueries). -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Hestia.Platform\Hestia.Platform.csproj" />
+    <!-- The finance events (BudgetLimitReached and the others) for FinanceAlertsConsumer. -->
+    <ProjectReference Include="..\..\..\Hestia.Contracts\Hestia.Contracts.csproj" />
+    <ProjectReference Include="..\Hestia.Modules.Alerts.Contracts\Hestia.Modules.Alerts.Contracts.csproj" />
+  </ItemGroup>
+
+</Project>
