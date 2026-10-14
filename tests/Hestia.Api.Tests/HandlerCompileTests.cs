@@ -61,7 +61,7 @@ public class HandlerCompileTests
         public void Consume(BadTestEvent message) => GC.KeepAlive(service);
     }
 
-    private sealed class AddBadConsumer : IWolverineExtension
+    public sealed class AddBadConsumer : IWolverineExtension
     {
         public void Configure(WolverineOptions options) => options.Discovery.IncludeType(typeof(BadTestConsumer));
     }
