@@ -238,7 +238,26 @@ modules. Today shows it, and the clients can poll it. The Documents module is th
 - **Tests with a moving clock:** a `TimeProvider` with a settable `Now` (see `TestClock` in the Tasks tests) tests a task
   that becomes overdue as time passes: move the clock, then ask for `GET /api/alerts?refresh=true`.
 
-## 11. Check
+## 11. Tips from the Home module (T22)
+
+- **Two modules that link to each other** (for example Documents and Home): each internal project references the other
+  module's `.Contracts` project only. This is legal, and it makes no loop between projects. But it can make a loop in
+  the services: `DocumentQueries` needs `LinkTargets`, which needs `IHomeQueries`, and Home's services need
+  `IDocumentQueries`. Keep each query interface simple: let it read only its own module's tables (`HomeQueries` takes
+  only `HomeDbContext`), and do not give it a service that calls other modules.
+- **A new link kind in another module:** add the constant to its `...LinkKinds` (and to `All`), check it in its link
+  check with your query interface, and add a consumer of your `...Deleted` event to that module (with the inbox). Each
+  module removes only its own links.
+- **Consumer class names:** give each consumer a name that no other module uses (for example
+  `DocumentItemLinksConsumer` and `TaskItemLinksConsumer`, not two classes `ItemDeletedConsumer`). Wolverine combines
+  all consumers of one event into one generated handler.
+- **Amounts:** a `decimal` column needs a precision (`HasPrecision(12, 2)`): the migration has `numeric(12,2)`, with
+  `precision: 12, scale: 2`, and the snapshot has `.HasPrecision(12, 2)`.
+- **A file download from an endpoint** (for example a CSV): return `TypedResults.File(bytes, contentType, fileName)`, and
+  add `.Produces(200, contentType: "text/csv")` so the OpenAPI document shows the type. A GET endpoint is open to a
+  read-only user.
+
+## 12. Check
 
 - `dotnet build` has no warnings.
 - `dotnet test` passes, with the architecture tests.

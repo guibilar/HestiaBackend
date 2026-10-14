@@ -22,6 +22,7 @@ src/
   Modules/
     Alerts/                         the "Needs attention" list of all modules: rules, store, /api/alerts (T15)
     Documents/                      documents: files on a volume, OCR, full-text search, expiry, links (T11)
+    Home/                           rooms and the home inventory: values, warranties, links, CSV export (T22)
     Identity/                       sign-in: users, sessions, the read-only token, /api/Auth (T03)
     Tasks/                          to-dos and repeated home tasks: due dates, completions, links, alerts (T19)
     Today/                          the Today screen: /api/today, the cards of all modules (T08)
@@ -35,6 +36,7 @@ tests/
   Hestia.Api.Tests/
   Hestia.Modules.Alerts.Tests/
   Hestia.Modules.Documents.Tests/   with small sample files (Samples/) for the upload and OCR tests
+  Hestia.Modules.Home.Tests/
   Hestia.Modules.Identity.Tests/
   Hestia.Modules.Sample.Tests/
   Hestia.Modules.Tasks.Tests/
@@ -343,7 +345,7 @@ module rules (IAlertSource) ──check──> alert store (raise, update, resol
 
 The Documents module (T11, schema `documents`) keeps receipts, warranties, leases, tax slips, insurance policies, and
 manuals. A document has details (title, kind, tags, issue and expiry dates, notes), one or more files, and links to
-things outside the module (first: finance transactions).
+things outside the module (finance transactions and home items).
 
 ```
 upload ──> files to the volume (by SHA-256) + rows and DocumentAdded (one save) ──> 201, ocrStatus Pending
@@ -361,7 +363,7 @@ upload ──> files to the volume (by SHA-256) + rows and DocumentAdded (one sa
 | `DELETE /{id}` | Deletes the document, its links, and its files. |
 | `GET /{id}/files/{fileId}` | The file, as a download. `?inline=true` shows it in the browser. |
 | `POST /{id}/ocr` | Runs the OCR again (202, `ocrStatus` `Pending`). |
-| `POST /{id}/links`, `DELETE /{id}/links/{linkId}` | A link, `{ "kind": "Money.Transaction", "targetId": "<transaction id>" }`. |
+| `POST /{id}/links`, `DELETE /{id}/links/{linkId}` | A link, `{ "kind": "Money.Transaction", "targetId": "<transaction id>" }` or `Home.Item` (T22). |
 | `GET /by-link?kind=Money.Transaction&id=<transaction id>` | The documents of one thing (for T14). |
 
 ```bash
@@ -397,7 +399,9 @@ upload wakes it at once. The status is in the database, so a restart loses no wo
 **Links.** A link has a kind and an id, both text, so later modules (Home inventory, People) can use the same table.
 The first kind is `Money.Transaction`: the host asks finance with the signed-in user whether the transaction exists
 (`POST /api/Transaction/Filter` with the transaction id, a read-only query). It never reads the finance database.
-Finance down: 502.
+Finance down: 502. The second kind is `Home.Item` (T22): the host checks the item with the Home module
+(`IHomeQueries`). When an item is deleted, `DocumentItemLinksConsumer` removes its links (with the inbox), and sends
+`DocumentUnlinked` for each one; the documents stay.
 
 **Events (durable, T38).** `DocumentAdded`, `DocumentChanged` (`Change`: `Details` or `OcrText`), `DocumentDeleted`,
 `DocumentLinked`, and `DocumentUnlinked`, in `Hestia.Modules.Documents.Contracts`. A delete sends `DocumentUnlinked`
@@ -528,6 +532,8 @@ curl -b cookies 'http://localhost:5097/api/tasks?due=overdue'
 **Links.** As in Documents: a kind and an id, both text. `Documents.Document` is checked with the Documents module
 (`IDocumentQueries`); `Money.Transaction` is checked with finance as the signed-in user (finance down: 502). When a
 document is deleted, the consumer `DocumentDeletedConsumer` removes its links (with the inbox); the tasks stay.
+`Home.Item` (T22) is checked with the Home module (`IHomeQueries`): a task with this link is maintenance of the item.
+When an item is deleted, `TaskItemLinksConsumer` removes its links (with the inbox).
 
 **Events (durable, T38).** `TaskCreated`, `TaskChanged` (`Change`: `Details` or `Links`), `TaskCompleted` (with the due
 date that was done and, for a repeated task, `NextDueOn`), `TaskReopened`, and `TaskDeleted`, in
@@ -552,6 +558,84 @@ date that was done and, for a repeated task, `NextDueOn`), `TaskReopened`, and `
 
 **Backups.** The `tasks` schema is in the Hestia database, so the backup job (T24) dumps it with the other modules. The
 CI backup check restores a task with its completion (`docker/ci/backup-restore-check.sh`).
+
+## Home
+
+The Home module (T22, schema `home`) keeps the rooms of the home and the things in them: where each thing is, what it
+cost, its serial number, and its warranty. An item links to its documents (receipt, manual, warranty), its purchase
+(a finance transaction), and its maintenance (tasks). The list can go out as a CSV file for an insurance claim.
+
+**Data.** A room has a name (unique in any letter case, at most 100 characters) and a sort order. The module starts with
+no rooms. An item has a name (required, at most 200 characters), a room (optional), a category (free text, for example
+`Appliance`), a brand, a model, a serial number, a quantity (default 1), a purchase date, a purchase price, a current
+value, the last day of its warranty, notes, and tags. Amounts are plain decimals in the one app currency (the clients
+show CAD), rounded to cents. **The prices are for one item.** The value of an item (`value`) is the current value, else
+the purchase price, else 0, multiplied by the quantity. The totals and the export use it.
+
+**Endpoints** (prefix `/api/home`; a read-only user can call the GET endpoints only, also the export):
+
+| Endpoint | Description |
+| --- | --- |
+| `GET /rooms` | All rooms in list order, with `itemCount` and `totalValue`. |
+| `POST /rooms` | A new room, JSON: `name`, `sortOrder` (optional; default: after the last room). 409 for a name that exists. |
+| `PUT /rooms/{id}` | A new `name`, and `sortOrder` (optional; without it, the place stays). |
+| `DELETE /rooms/{id}` | Deletes a room without items. A room with items gets 409. |
+| `PUT /rooms/order` | `{ "roomIds": [ ... ] }`: all room ids, each one time, in the new order. |
+| `POST /items` | A new item, JSON: `name` (required), `roomId`, `category`, `brand`, `model`, `serialNumber`, `quantity`, `purchasedOn`, `purchasePrice`, `currentValue`, `warrantyUntil`, `notes`, `tags`, `links` (`[{ "kind": "Documents.Document", "targetId": "<id>" }]`). Answers 201. |
+| `GET /items?room=&category=&tag=&q=&warranty=&page=1&pageSize=20` | A page of items, by name (with `q`: best match first). `room`: a room id, or `none`. `category`: any letter case. `q`: full-text search. `warranty`: `active` (ends today or later), `expiring` (ends in the next 30 days), `expired` (ended before today). |
+| `GET /items/{id}` | One item, with `links`, `documents` (from both sides of the link), and `maintenance` (the tasks, from both sides, by due date). |
+| `PUT /items/{id}` | New details (all of them, as for `POST /items` without `links`). The links stay. |
+| `DELETE /items/{id}` | Deletes the item and its links. Documents and tasks lose their links to it. |
+| `POST /items/{id}/links`, `DELETE /items/{id}/links/{linkId}` | A link: `Documents.Document`, `Money.Transaction`, or `Tasks.Task`. |
+| `GET /items/by-link?kind=Documents.Document&id=<document id>` | The items of one thing: the items that link to it, and the items that the document or the task links to. |
+| `GET /items/export.csv?room=&category=&tag=&q=&warranty=` | The items (all, or the list filters) as CSV. |
+| `GET /summary` | `date`, `itemCount`, `totalValue`, `rooms` (each room, then one entry with `roomId` null for the items without a room), `warrantiesEnding` (30 days). |
+
+```bash
+curl -b cookies -H 'Content-Type: application/json' -d '{"name":"Kitchen"}' http://localhost:5097/api/home/rooms
+curl -b cookies -H 'Content-Type: application/json' \
+  -d '{"name":"Dishwasher","roomId":"<room id>","brand":"Bosch","purchasePrice":899.99,"warrantyUntil":"2027-03-01"}' \
+  http://localhost:5097/api/home/items
+curl -b cookies -o inventory.csv http://localhost:5097/api/home/items/export.csv
+```
+
+**Search.** `q` is a full-text search (a generated `tsvector` column with a GIN index, as Documents) in the name, the
+brand, the model, the serial number, the category, the notes, and the tags, with the web search syntax.
+
+**Links.** As in Documents and Tasks: a kind and an id, both text. The host checks that the thing exists: a document
+with `IDocumentQueries`, a task with `ITaskQueries`, a transaction with finance as the signed-in user (finance down:
+502). Documents and Tasks have the new link kind `Home.Item`, checked with `IHomeQueries`. Each module removes its links
+when the target is deleted, with the inbox:
+
+- Home (`ItemLinkCleanupConsumer`): `DocumentDeleted` and `TaskDeleted`;
+- Documents (`DocumentItemLinksConsumer`) and Tasks (`TaskItemLinksConsumer`): `ItemDeleted`.
+
+**Maintenance** has no data of its own: a maintenance job is a (repeated) task with a `Home.Item` link, or a task that
+the item links to. `GET /items/{id}` lists them in `maintenance`, with the next due date.
+
+**CSV export.** One row per item: Room, Name, Category, Brand, Model, Serial number, Quantity, Purchase date, Purchase
+price, Current value, Warranty until, Documents (the titles, with `; `). Rows by room (room order, items without a room
+last), then by name. UTF-8 with a byte order mark, CRLF line ends, RFC 4180 quotes. Dates are `yyyy-MM-dd`, amounts
+`0.00` with a point. A text that starts with `=`, `+`, `-`, or `@` gets an apostrophe first, so a spreadsheet does not run
+it as a formula.
+
+**Events (durable, T38).** `ItemAdded`, `ItemChanged` (`Change`: `Details` or `Links`), `ItemDeleted`, and `RoomChanged`
+(`Change`: `Added`, `Renamed`, `Deleted`; a new order raises no event), in `Hestia.Modules.Home.Contracts`. Other modules
+read items with `IHomeQueries` (`FindItemAsync`, `ListByLinkAsync`).
+
+**Alerts.** Source `Home.Warranty`: `home.warranty-ending.<id>` (Neutral, link `/home/items/<id>`) for each item whose
+warranty ends today or in the next 30 days, with the name, the day, and the days left. **No double alert:** an item has
+no alert when one of its documents expires on the same day (the Documents alert covers it). `HomeAlertsConsumer` asks
+for a check after each item event, after a document link to or from an item, and after new document details. Home has no
+Today tile in v1.
+
+| Setting (`Home` section) | Default | Description |
+| --- | --- | --- |
+| `TimeZone` | `UTC` (appsettings: `America/Toronto`) | The IANA time zone of the days. Docker: `TZ`. |
+| `WarrantySoonDays` | `30` | The days of "ends soon": the alerts, `warranty=expiring`, and the summary. |
+
+**Backups.** The `home` schema is in the Hestia database, so the backup job (T24) dumps it. The CI backup check restores
+a home item with its room (`docker/ci/backup-restore-check.sh`).
 
 ### OpenAPI document
 

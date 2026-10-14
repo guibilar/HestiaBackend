@@ -103,7 +103,7 @@ public sealed record UpdateDocumentRequest(
     string? Notes);
 
 /// <summary>A new link (<c>POST /api/documents/{id}/links</c>).</summary>
-/// <param name="Kind">What to link to, for example <c>Money.Transaction</c>.</param>
+/// <param name="Kind">What to link to: <c>Money.Transaction</c> or <c>Home.Item</c>.</param>
 /// <param name="TargetId">The id of the thing, for example the transaction id.</param>
 public sealed record CreateDocumentLinkRequest(string? Kind, string? TargetId);
 
@@ -113,5 +113,8 @@ public static class DocumentLinkKinds
     /// <summary>A finance transaction. The target id is the transaction id (a GUID).</summary>
     public const string MoneyTransaction = "Money.Transaction";
 
-    public static readonly IReadOnlyList<string> All = [MoneyTransaction];
+    /// <summary>An item of the Home module (T22), for example the receipt or the manual of a dishwasher. The target id is the item id.</summary>
+    public const string HomeItem = "Home.Item";
+
+    public static readonly IReadOnlyList<string> All = [MoneyTransaction, HomeItem];
 }
