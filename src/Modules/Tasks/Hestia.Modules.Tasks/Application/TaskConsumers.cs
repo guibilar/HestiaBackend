@@ -1,5 +1,6 @@
 using Hestia.Modules.Alerts.Contracts;
 using Hestia.Modules.Documents.Contracts;
+using Hestia.Modules.Home.Contracts;
 using Hestia.Modules.Tasks.Contracts;
 using Hestia.Modules.Tasks.Domain;
 using Hestia.Modules.Tasks.Infrastructure;
@@ -67,6 +68,45 @@ public sealed class DocumentDeletedConsumer(TasksDbContext db, TimeProvider time
                     task.Repeat, task.Status, now));
             }
             logger.LogInformation("Tasks: removed {Links} link(s) to the deleted document {DocumentId}", links.Count, message.DocumentId);
+        }
+        // The inbox row commits also without a change.
+        await db.SaveChangesAsync(cancellationToken);
+    }
+}
+
+/// <summary>
+/// Removes the links of tasks to a deleted home item (T22). The tasks stay. Each task that loses a link raises
+/// <see cref="TaskChanged"/> (<see cref="TaskChange.Links"/>). With the inbox (T36): the same event twice changes the data
+/// once.
+/// </summary>
+public sealed class TaskItemLinksConsumer(TasksDbContext db, TimeProvider time, ILogger<TaskItemLinksConsumer> logger)
+{
+    /// <summary>The inbox name of this consumer: "&lt;Module&gt;.&lt;Class&gt;". Do not change it later.</summary>
+    public const string InboxName = "Tasks.TaskItemLinksConsumer";
+
+    public async Task Consume(ItemDeleted message, CancellationToken cancellationToken)
+    {
+        if (!await db.TryReceiveAsync(message.EventId, InboxName, cancellationToken))
+        {
+            return; // Handled already.
+        }
+        var target = message.ItemId.ToString("D");
+        var links = await db.Links
+            .Where(l => l.Kind == TaskLinkKinds.HomeItem && l.TargetId == target)
+            .ToListAsync(cancellationToken);
+        if (links.Count > 0)
+        {
+            var taskIds = links.Select(l => l.TaskId).Distinct().ToList();
+            var tasks = await db.Tasks.Where(t => taskIds.Contains(t.Id)).ToListAsync(cancellationToken);
+            var now = time.GetUtcNow();
+            db.Links.RemoveRange(links);
+            foreach (var task in tasks)
+            {
+                task.UpdatedAt = now;
+                db.RaiseEvent(new TaskChanged(task.Id, TaskChange.Links, task.Title, task.DueOn, TaskTags.Read(task.Tags),
+                    task.Repeat, task.Status, now));
+            }
+            logger.LogInformation("Tasks: removed {Links} link(s) to the deleted home item {ItemId}", links.Count, message.ItemId);
         }
         // The inbox row commits also without a change.
         await db.SaveChangesAsync(cancellationToken);

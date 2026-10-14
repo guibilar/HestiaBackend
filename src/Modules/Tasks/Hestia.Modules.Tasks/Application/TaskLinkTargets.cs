@@ -1,4 +1,5 @@
 using Hestia.Modules.Documents.Contracts;
+using Hestia.Modules.Home.Contracts;
 using Hestia.Modules.Tasks.Contracts;
 using Hestia.Platform.Exceptions;
 using Hestia.Platform.Finance;
@@ -7,10 +8,11 @@ namespace Hestia.Modules.Tasks.Application;
 
 /// <summary>
 /// The things that a task can link to (<see cref="TaskLinkKinds"/>), and the check that one exists: a document through
-/// <see cref="IDocumentQueries"/>, a finance transaction through <see cref="IFinanceClient"/> as the signed-in user (D13).
-/// The module never reads the tables of another module or the finance database.
+/// <see cref="IDocumentQueries"/>, a home item through <see cref="IHomeQueries"/> (T22), a finance transaction through
+/// <see cref="IFinanceClient"/> as the signed-in user (D13). The module never reads the tables of another module or the
+/// finance database.
 /// </summary>
-public sealed class TaskLinkTargets(IDocumentQueries documents, IFinanceClient finance)
+public sealed class TaskLinkTargets(IDocumentQueries documents, IHomeQueries home, IFinanceClient finance)
 {
     /// <summary>The kind and the id in their stored form. Does not check that the thing exists.</summary>
     /// <exception cref="InvalidInputException">An unknown kind, or an id that this kind cannot have.</exception>
@@ -25,9 +27,12 @@ public sealed class TaskLinkTargets(IDocumentQueries documents, IFinanceClient f
             ?? throw new InvalidInputException("kind", $"\"{name}\" is not a link kind. Use one of: {string.Join(", ", TaskLinkKinds.All)}.");
         if (!Guid.TryParse(targetId?.Trim(), out var id) || id == Guid.Empty)
         {
-            throw new InvalidInputException("targetId", known == TaskLinkKinds.DocumentsDocument
-                ? "A document id is a GUID."
-                : "A finance transaction id is a GUID.");
+            throw new InvalidInputException("targetId", known switch
+            {
+                TaskLinkKinds.DocumentsDocument => "A document id is a GUID.",
+                TaskLinkKinds.HomeItem => "A home item id is a GUID.",
+                _ => "A finance transaction id is a GUID."
+            });
         }
         return (known, id.ToString("D"));
     }
@@ -44,6 +49,14 @@ public sealed class TaskLinkTargets(IDocumentQueries documents, IFinanceClient f
             if (await documents.FindAsync(id, cancellationToken) is null)
             {
                 throw new InvalidInputException("targetId", "No document has this id.");
+            }
+            return (linkKind, target);
+        }
+        if (linkKind == TaskLinkKinds.HomeItem)
+        {
+            if (await home.FindItemAsync(id, cancellationToken) is null)
+            {
+                throw new InvalidInputException("targetId", "No home item has this id.");
             }
             return (linkKind, target);
         }

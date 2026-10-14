@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Internal: domain, application (rooms, items, links, export, alerts), infrastructure, endpoints. Only the host
+       references this project. Other modules use Hestia.Modules.Home.Contracts. -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Hestia.Platform\Hestia.Platform.csproj" />
+    <ProjectReference Include="..\Hestia.Modules.Home.Contracts\Hestia.Modules.Home.Contracts.csproj" />
+    <!-- The warranty alerts (IAlertSource, IAlertChecks; T15). Today shows them through the Alerts module. -->
+    <ProjectReference Include="..\..\Alerts\Hestia.Modules.Alerts.Contracts\Hestia.Modules.Alerts.Contracts.csproj" />
+    <!-- Links to documents: the existence check, the documents of an item, and the DocumentDeleted consumer. -->
+    <ProjectReference Include="..\..\Documents\Hestia.Modules.Documents.Contracts\Hestia.Modules.Documents.Contracts.csproj" />
+    <!-- Links to tasks (maintenance): the existence check, the tasks of an item, and the TaskDeleted consumer. -->
+    <ProjectReference Include="..\..\Tasks\Hestia.Modules.Tasks.Contracts\Hestia.Modules.Tasks.Contracts.csproj" />
+  </ItemGroup>
+
+</Project>

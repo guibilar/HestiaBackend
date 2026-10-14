@@ -11,6 +11,8 @@
     <ProjectReference Include="..\Hestia.Modules.Documents.Contracts\Hestia.Modules.Documents.Contracts.csproj" />
     <!-- The expiry alerts (IAlertSource, IAlertChecks; T15). Today shows them through the Alerts module. -->
     <ProjectReference Include="..\..\Alerts\Hestia.Modules.Alerts.Contracts\Hestia.Modules.Alerts.Contracts.csproj" />
+    <!-- Links to home items (T22): the existence check (IHomeQueries) and the ItemDeleted consumer. -->
+    <ProjectReference Include="..\..\Home\Hestia.Modules.Home.Contracts\Hestia.Modules.Home.Contracts.csproj" />
   </ItemGroup>
 
 </Project>

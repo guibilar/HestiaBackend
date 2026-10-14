@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Hestia.Modules.Documents.Contracts;
+using Hestia.Modules.Home.Contracts;
 using Hestia.Modules.Tasks.Application;
 using Hestia.Modules.Tasks.Contracts;
 using Hestia.Platform.Events;
@@ -263,6 +264,35 @@ public class LinkTests
         Assert.Single((await host.GetAsync(task.Id)).Links);
         Assert.Equal(1, await host.WithDbAsync(db => db.Set<InboxEntry>()
             .CountAsync(entry => entry.EventId == deleted.EventId && entry.Consumer == DocumentDeletedConsumer.InboxName)));
+    }
+
+    [Fact]
+    public async Task ALink_ToAHomeItem_IsCheckedWithTheHomeModule_AndGoesWhenTheItemIsDeleted()
+    {
+        var (host, finance, _) = await StartAsync();
+        await using var _host = host;
+        await using var _finance = finance;
+        var created = await host.Client.PostAsJsonAsync("/api/home/items", new CreateItemRequest("Furnace"), HestiaApiFactory.Json);
+        var item = await created.ReadAsync<ItemDto>();
+        var task = await host.CreateAsync("Change the furnace filter", TasksHost.Today.AddDays(10), TasksHost.Every(3, RepeatUnit.Months));
+        var links = $"{Tasks}/{task.Id}/links";
+
+        await TasksHost.AssertBadRequestAsync(await host.Client.PostAsJsonAsync(links,
+            new CreateTaskLinkRequest(TaskLinkKinds.HomeItem, Guid.NewGuid().ToString())), "targetId");
+        await TasksHost.AssertBadRequestAsync(await host.Client.PostAsJsonAsync(links, new CreateTaskLinkRequest(TaskLinkKinds.HomeItem, "1")), "targetId");
+        var response = await host.Client.PostAsJsonAsync(links, new CreateTaskLinkRequest("home.item", item.Id.ToString()));
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.Empty(finance.Requests);
+        var found = await (await host.Client.GetAsync($"{Tasks}/by-link?kind=Home.Item&id={item.Id}")).ReadAsync<List<TaskSummaryDto>>();
+        Assert.Equal(new[] { task.Id }, found.Select(t => t.Id));
+
+        // The item is deleted: the consumer removes the link (with the inbox), and the task stays.
+        Assert.Equal(HttpStatusCode.NoContent, (await host.Client.DeleteAsync($"/api/home/items/{item.Id}")).StatusCode);
+        await Wait.UntilAsync(() => host.GetAsync(task.Id), t => t.Links.Count == 0);
+        Assert.Empty((await host.GetAsync(task.Id)).Links);
+        Assert.Equal(1, await host.WithDbAsync(db => db.Set<InboxEntry>()
+            .CountAsync(entry => entry.Consumer == TaskItemLinksConsumer.InboxName)));
     }
 
     private static async Task DeliverAsync(TasksHost host, object message)

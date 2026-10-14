@@ -15,6 +15,8 @@
     <ProjectReference Include="..\..\Today\Hestia.Modules.Today.Contracts\Hestia.Modules.Today.Contracts.csproj" />
     <!-- Links to documents: the existence check (IDocumentQueries) and the DocumentDeleted consumer. -->
     <ProjectReference Include="..\..\Documents\Hestia.Modules.Documents.Contracts\Hestia.Modules.Documents.Contracts.csproj" />
+    <!-- Links to home items (T22, maintenance): the existence check (IHomeQueries) and the ItemDeleted consumer. -->
+    <ProjectReference Include="..\..\Home\Hestia.Modules.Home.Contracts\Hestia.Modules.Home.Contracts.csproj" />
   </ItemGroup>
 
 </Project>

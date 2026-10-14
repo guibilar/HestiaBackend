@@ -1,15 +1,16 @@
 using Hestia.Modules.Documents.Contracts;
+using Hestia.Modules.Home.Contracts;
 using Hestia.Platform.Exceptions;
 using Hestia.Platform.Finance;
 
 namespace Hestia.Modules.Documents.Application;
 
 /// <summary>
-/// The things that a document can link to (<see cref="DocumentLinkKinds"/>), and the check that one exists. The first
-/// kind is a finance transaction: the check asks finance with the signed-in user (<see cref="IFinanceClient"/>, D13),
-/// and never reads the finance database.
+/// The things that a document can link to (<see cref="DocumentLinkKinds"/>), and the check that one exists: a finance
+/// transaction through finance with the signed-in user (<see cref="IFinanceClient"/>, D13), and a home item through
+/// <see cref="IHomeQueries"/> (T22). The module never reads the finance database or the tables of another module.
 /// </summary>
-public sealed class LinkTargets(IFinanceClient finance)
+public sealed class LinkTargets(IFinanceClient finance, IHomeQueries home)
 {
     /// <summary>The kind and the id in their stored form. Does not check that the thing exists.</summary>
     /// <exception cref="InvalidInputException">An unknown kind, or an id that this kind cannot have.</exception>
@@ -20,15 +21,15 @@ public sealed class LinkTargets(IFinanceClient finance)
         {
             throw new InvalidInputException("kind", $"Choose what to link to: {string.Join(", ", DocumentLinkKinds.All)}.");
         }
-        if (!string.Equals(name, DocumentLinkKinds.MoneyTransaction, StringComparison.OrdinalIgnoreCase))
+        var known = DocumentLinkKinds.All.FirstOrDefault(k => string.Equals(k, name, StringComparison.OrdinalIgnoreCase))
+            ?? throw new InvalidInputException("kind", $"\"{name}\" is not a link kind. Use one of: {string.Join(", ", DocumentLinkKinds.All)}.");
+        if (!Guid.TryParse(targetId?.Trim(), out var id) || id == Guid.Empty)
         {
-            throw new InvalidInputException("kind", $"\"{name}\" is not a link kind. Use one of: {string.Join(", ", DocumentLinkKinds.All)}.");
+            throw new InvalidInputException("targetId", known == DocumentLinkKinds.HomeItem
+                ? "A home item id is a GUID."
+                : "A finance transaction id is a GUID.");
         }
-        if (!Guid.TryParse(targetId?.Trim(), out var transactionId) || transactionId == Guid.Empty)
-        {
-            throw new InvalidInputException("targetId", "A finance transaction id is a GUID.");
-        }
-        return (DocumentLinkKinds.MoneyTransaction, transactionId.ToString("D"));
+        return (known, id.ToString("D"));
     }
 
     /// <summary>The kind and the id in their stored form, after a check that the thing exists.</summary>
@@ -37,6 +38,15 @@ public sealed class LinkTargets(IFinanceClient finance)
     public async Task<(string Kind, string TargetId)> CheckAsync(string? kind, string? targetId, CancellationToken cancellationToken)
     {
         var (linkKind, target) = Normalize(kind, targetId);
+        if (linkKind == DocumentLinkKinds.HomeItem)
+        {
+            if (await home.FindItemAsync(Guid.Parse(target), cancellationToken) is null)
+            {
+                throw new InvalidInputException("targetId", "No home item has this id.");
+            }
+            return (linkKind, target);
+        }
+
         // Finance has no "get one transaction" endpoint. The filter with the transaction id is a read-only query, and
         // it finds only visible (not deleted) transactions.
         var page = await finance.PostAsync<TransactionFilter, TransactionPage>("/api/Transaction/Filter",
