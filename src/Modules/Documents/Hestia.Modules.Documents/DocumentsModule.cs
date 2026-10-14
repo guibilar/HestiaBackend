@@ -52,8 +52,11 @@ public static class DocumentsModuleExtensions
         services.AddSingleton<DocumentStorage>();
         // T59: /health/ready checks that the host can write to the documents folder.
         services.AddHealthChecks().AddCheck<DocumentStorageHealthCheck>(DocumentStorageHealthCheck.Name, tags: [HealthTags.Ready]);
-        // T59: removes the files that no document uses.
+        // T59, T64: the checks of the volume (unused files, rows without a file), as a command and on a schedule.
+        services.AddSingleton<DocumentFileCheck>();
         services.AddSingleton<IModuleCommand, CleanFilesCommand>();
+        services.AddSingleton<FileCheckWorker>();
+        services.AddHostedService(provider => provider.GetRequiredService<FileCheckWorker>());
         services.AddScoped<LinkTargets>();
         services.AddScoped<DocumentService>();
         services.AddScoped<IDocumentQueries, DocumentQueries>();

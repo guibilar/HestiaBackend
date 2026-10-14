@@ -168,6 +168,17 @@ jobs:
         run: |
           for i in $(seq 1 60); do curl -sf http://localhost:5097/health/ready && exit 0; sleep 1; done
           exit 1
+      # T64: the answer is JSON with the name and status of each check, and nothing more (the endpoint is open).
+      - name: /health/ready answers JSON with each check
+        run: |
+          body=$(curl -sf http://localhost:5097/health/ready)
+          echo "$body"
+          # Healthy, or Degraded when a check that can only warn does (for example the broker, T37).
+          echo "$body" | jq -e '.status == "Healthy" or .status == "Degraded"'
+          echo "$body" | jq -e '[.checks[] | select(.name == "database" or .name == "finance" or .name == "documents-storage")
+            | .status] == ["Healthy", "Healthy", "Healthy"]'
+          echo "$body" | jq -e 'all(.checks[]; keys == ["name", "status"])'
+          echo "$body" | jq -e 'keys == ["checks", "status"]'
       # T03: health, sign-in, the session cookie, a module, finance (the stub), sign-out, and 401 without a session.
       - name: Smoke test (docker/smoke-test.sh)
         run: docker/smoke-test.sh http://localhost:5097
@@ -251,6 +262,26 @@ jobs:
           after=$(docker exec hestia-api sh -c 'find /data/documents -type f ! -path "*/tmp/*" | wc -l')
           test "$after" = "$((before - 1))"
           curl -sf http://localhost:5097/health/ready
+      # T64: --check-missing finds a document row whose file is not on the volume (exit code 2), and nothing after the
+      # file is back.
+      - name: documents-clean-files --check-missing
+        run: |
+          output=$(docker compose run --rm -T hestia-api documents-clean-files --check-missing)
+          echo "$output"
+          echo "$output" | grep -q 'No missing files.'
+          file=$(docker exec hestia-api sh -c 'find /data/documents -type f ! -path "*/tmp/*" | head -n 1')
+          key=${file#/data/documents/}
+          docker exec hestia-api mv "$file" /tmp/moved-document-file
+          set +e
+          output=$(docker compose run --rm -T hestia-api documents-clean-files --check-missing)
+          code=$?
+          set -e
+          docker exec hestia-api mv /tmp/moved-document-file "$file"
+          echo "$output"
+          test "$code" = 2
+          echo "$output" | grep -q "missing   $key (document "
+          output=$(docker compose run --rm -T hestia-api documents-clean-files --check-missing)
+          echo "$output" | grep -q 'No missing files.'
       - name: A module event reaches its consumer after the commit (in process)
         run: |
           curl -sf -H "Cookie: $SESSION_COOKIE" -X POST -H 'Content-Type: application/json' -d '{"name":"CI kettle"}' \
