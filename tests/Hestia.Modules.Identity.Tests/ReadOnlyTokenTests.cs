@@ -37,7 +37,9 @@ public class ReadOnlyTokenTests
         var client = ClientWith(factory, Token);
 
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/sample/items")).StatusCode);
-        Assert.Equal("read-only token", (await (await client.GetAsync("/api/Auth/me")).ReadAsync<CurrentUserDto>()).Username);
+        // The clients hide their write actions for this scope (T60).
+        Assert.Equal(new CurrentUserDto("read-only token", "read-only"),
+            await (await client.GetAsync("/api/Auth/me")).ReadAsync<CurrentUserDto>());
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/Accounts")).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await client.PostAsJsonAsync("/api/Transaction/Filter", new { })).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await client.PostAsJsonAsync("/api/Reports/breakdown", new { interval = "Month" })).StatusCode);

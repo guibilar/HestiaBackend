@@ -121,6 +121,10 @@ whole host. It took over the sign-in code of the finance backend. The clients do
 - **Read-only token** (`Identity:ReadOnlyToken`, at least 32 characters): `Authorization: Bearer <token>` reads
   everything and changes nothing. It can call every GET, and the finance queries in `FinanceProxy:ReadOnlyQueries`.
   Other requests get 403.
+- **The scope of the user** (T60): `GET /api/Auth/me` and `POST /api/Auth/login` answer
+  `{ "username": "...", "scope": "full" }`. The scope is `full` for a cookie user, and `read-only` for the read-only
+  token. It comes from the same rule as the authorization (`HestiaUser.ScopeOf`). The clients read it after the
+  sign-in and hide their write actions for a `read-only` user. An old client ignores the field.
 - **Every endpoint needs a signed-in user**, unless it allows anonymous users (only the sign-in and the health checks).
   A module does nothing for this. In a module endpoint, the user is the normal `HttpContext.User`. A module endpoint
   that only reads, but uses POST, can be open to the read-only token: `.ReadOnlyQuery()` (`Hestia.Platform.Auth`).
@@ -420,8 +424,8 @@ with the wrong content type gets 415 (T59).
 
 ### OpenAPI document
 
-The host describes the module endpoints (not the finance paths) at `/openapi/v1.json`. The Angular and Kotlin clients
-can generate their models from it. Like every endpoint, it needs a signed-in user, for example the read-only token:
+The host describes the module endpoints (not the finance paths) at `/openapi/v1.json`, with `/api/Auth/*`
+(`CurrentUserDto` has `username` and `scope`). The Angular and Kotlin clients can generate their models from it. Like every endpoint, it needs a signed-in user, for example the read-only token:
 
 ```bash
 curl -H "Authorization: Bearer $HESTIA_READONLY_TOKEN" http://localhost:5097/openapi/v1.json > hestia-openapi.json
