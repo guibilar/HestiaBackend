@@ -1,8 +1,8 @@
 #!/bin/sh
 # CI check for the backups (T24). Run it from the directory with docker-compose.yml, with the stack up.
-#   1. Adds a Sample item and a document with a file (T11), and makes a backup with backup.sh.
+#   1. Adds a Sample item, a document with a file (T11), and a task (T19), and makes a backup with backup.sh.
 #   2. Restores the dump into a new, empty database, and checks the "sample" schema and the item, the document row,
-#      and the copy of its file next to the dump.
+#      the copy of its file next to the dump, and the task with its completion (the "tasks" schema).
 #   3. Adds a second item and a second document, runs docker/restore.sh (dump from the volume, then from a file on
 #      this machine), and checks that the database and the document files are back at the dump: the first item and
 #      the first document only, with its file.
@@ -33,6 +33,12 @@ add_document() { # title
   { cat "$samples/receipt.png"; head -c 32 /dev/urandom; } > "$file"
   curl -sf -b "$cookies" -F "title=$1" -F "files=@$file;type=image/png" "$api/api/documents" | jq -r '.files[0].sha256'
 }
+# T19: a task, done once (so it has a completion row).
+add_task() {
+  id=$(curl -sf -b "$cookies" -H 'Content-Type: application/json' -d "{\"title\":\"$1\"}" "$api/api/tasks" | jq -r .id)
+  curl -sf -b "$cookies" -X POST "$api/api/tasks/$id/done" > /dev/null
+}
+tasks_named() { sql "$1" "SELECT count(*) FROM tasks.\"Tasks\" t JOIN tasks.\"TaskCompletions\" c ON c.\"TaskId\" = t.\"Id\" WHERE t.\"Title\" = '$2'"; }
 documents_named() { sql "$1" "SELECT count(*) FROM documents.\"Documents\" WHERE \"Title\" = '$2'"; }
 file_in_volume() { # sha256; prints yes or no
   if docker compose exec -T backup test -f "/documents/$(echo "$1" | cut -c1-2)/$1"; then echo yes; else echo no; fi
@@ -53,6 +59,7 @@ fail() { echo "::error::$*" >&2; exit 1; }
 sign_in
 echo "1. Backup"
 add_item before-backup
+add_task before-backup
 first_sha=$(add_document before-backup)
 [ "$(file_in_volume "$first_sha")" = yes ] || fail "The uploaded file is not on the documents volume."
 docker compose exec -T backup backup.sh once
@@ -76,10 +83,13 @@ docker compose exec -T backup pg_restore --no-owner --exit-on-error --dbname res
   fail "The restored database does not have the Sample item."
 [ "$(documents_named restore_check before-backup)" = 1 ] ||
   fail "The restored database does not have the document."
+[ "$(tasks_named restore_check before-backup)" = 1 ] ||
+  fail "The restored database does not have the task and its completion (tasks schema)."
 docker compose exec -T backup dropdb restore_check
 
 echo "3. docker/restore.sh with the dump in the volume"
 add_item after-backup
+add_task after-backup
 second_sha=$(add_document after-backup)
 docker/restore.sh "$(basename "$dump")"
 wait_ready
@@ -87,6 +97,8 @@ wait_ready
 [ "$(items_named Hestia after-backup)" = 0 ] || fail "restore.sh kept an item from after the dump."
 [ "$(documents_named Hestia before-backup)" = 1 ] || fail "restore.sh lost the document from the dump."
 [ "$(documents_named Hestia after-backup)" = 0 ] || fail "restore.sh kept a document from after the dump."
+[ "$(tasks_named Hestia before-backup)" = 1 ] || fail "restore.sh lost the task from the dump."
+[ "$(tasks_named Hestia after-backup)" = 0 ] || fail "restore.sh kept a task from after the dump."
 [ "$(file_in_volume "$second_sha")" = no ] || fail "restore.sh kept the file of a document from after the dump."
 [ "$(download_sha before-backup)" = "$first_sha" ] || fail "The restored document does not download its file."
 [ "$(docker compose exec -T backup stat -c '%u' "/documents/$(echo "$first_sha" | cut -c1-2)/$first_sha")" = 1654 ] ||
