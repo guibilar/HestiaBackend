@@ -19,6 +19,8 @@
   <ItemGroup>
     <ProjectReference Include="..\Hestia.Platform\Hestia.Platform.csproj" />
     <ProjectReference Include="..\Hestia.Contracts\Hestia.Contracts.csproj" />
+    <!-- The host's own alert rules (Events/SystemHealthAlerts.cs, T80). -->
+    <ProjectReference Include="..\Modules\Alerts\Hestia.Modules.Alerts.Contracts\Hestia.Modules.Alerts.Contracts.csproj" />
   </ItemGroup>
 
   <!-- The modules. The host finds them at start (ModuleLoader); a reference here is all it needs. -->

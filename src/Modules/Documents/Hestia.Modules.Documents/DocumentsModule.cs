@@ -55,6 +55,7 @@ public static class DocumentsModuleExtensions
         // T59, T64: the checks of the volume (unused files, rows without a file), as a command and on a schedule.
         services.AddSingleton<DocumentFileCheck>();
         services.AddSingleton<IModuleCommand, CleanFilesCommand>();
+        services.AddSingleton<FileCheckState>();
         services.AddSingleton<FileCheckWorker>();
         services.AddHostedService(provider => provider.GetRequiredService<FileCheckWorker>());
         services.AddScoped<LinkTargets>();
@@ -71,6 +72,8 @@ public static class DocumentsModuleExtensions
         // The expiry rules (T15): the Alerts module runs them, and Today shows their alerts. After a document event,
         // DocumentAlertsConsumer checks that document (Wolverine finds it; it needs no registration).
         services.AddScoped<IAlertSource, DocumentExpiryAlerts>();
+        // T80: the rows without a file, from the last scheduled file check (FileCheckWorker).
+        services.AddScoped<IAlertSource, DocumentFileAlerts>();
         return services;
     }
 

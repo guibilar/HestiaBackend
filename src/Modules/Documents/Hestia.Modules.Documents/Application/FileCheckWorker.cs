@@ -1,3 +1,4 @@
+using Hestia.Modules.Alerts.Contracts;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -13,9 +14,13 @@ namespace Hestia.Modules.Documents.Application;
 /// </list>
 /// A healthy volume gives one information line. A failure of a run is an error in the log; the next run comes at the
 /// normal time.
+/// <para>T80: each run stores its missing rows in <see cref="FileCheckState"/>, and asks the Alerts module for a check
+/// of <see cref="DocumentFileAlerts"/>, so the alert <c>documents.files-missing</c> shows (or goes) at once.</para>
 /// </summary>
 public sealed class FileCheckWorker(
     DocumentFileCheck check,
+    FileCheckState state,
+    IAlertChecks alerts,
     IOptions<DocumentsOptions> options,
     TimeProvider time,
     ILogger<FileCheckWorker> logger) : BackgroundService
@@ -77,6 +82,8 @@ public sealed class FileCheckWorker(
         }
 
         var missing = await check.FindMissingAsync(cancellationToken);
+        state.Record(new FileCheckResult(time.GetUtcNow(), missing));
+        alerts.RequestCheck(DocumentFileAlerts.SourceName);
         foreach (var row in missing)
         {
             logger.LogWarning(

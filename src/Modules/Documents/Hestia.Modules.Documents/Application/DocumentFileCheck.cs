@@ -98,6 +98,28 @@ public sealed class DocumentFileCheck(DocumentStorage storage, IServiceScopeFact
         return missing.Where(row => still.Contains(row.FileId)).ToList();
     }
 
+    /// <summary>
+    /// The rows of an earlier <see cref="FindMissingAsync"/> that are still missing: the row still exists, and its file
+    /// is still not on the volume (T80). It looks only at these files, so it is cheap: it does not read the volume.
+    /// </summary>
+    public async Task<IReadOnlyList<MissingFile>> StillMissingAsync(IReadOnlyList<MissingFile> missing, CancellationToken cancellationToken)
+    {
+        if (missing.Count == 0)
+        {
+            return missing;
+        }
+        var ids = missing.Select(row => row.FileId).ToList();
+        HashSet<Guid> rows;
+        await using (var scope = scopes.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<DocumentsDbContext>();
+            rows = (await db.Files.AsNoTracking().Where(file => ids.Contains(file.Id)).Select(file => file.Id)
+                .ToListAsync(cancellationToken)).ToHashSet();
+        }
+        return missing.Where(row => rows.Contains(row.FileId) &&
+            (!DocumentStorage.IsKey(row.StorageKey) || !storage.Exists(row.StorageKey))).ToList();
+    }
+
     /// <summary>True when the file is still unused just before a delete (it can have changed since the check).</summary>
     public async Task<bool> StillUnusedAsync(UnusedFile unused, CancellationToken cancellationToken)
     {
