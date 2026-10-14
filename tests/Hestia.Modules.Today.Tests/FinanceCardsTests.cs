@@ -209,6 +209,7 @@ public sealed class FinanceCardsTests
         Assert.Equal(TodayValue.Percent(120m), items[0].Values["used"]);
         Assert.Equal(TodaySeverity.Bad, items[0].Severity);
         Assert.Equal(TodayValue.Day(new DateOnly(2026, 6, 30)), items[1].Values["reach"]);
+        Assert.Equal(FinanceCards.TransactionsImportLink, items[1].Link);
     }
 
     [Fact]
@@ -221,6 +222,7 @@ public sealed class FinanceCardsTests
         var item = Assert.Single(items);
         Assert.Equal("No statements imported in {days} days", item.Text);
         Assert.Equal(TodayValue.Count(9), item.Values["days"]);
+        Assert.Equal("/money/transactions#import", item.Link);
         Assert.Empty(FinanceCards.AttentionItems(Inputs(accounts: accounts), new DateOnly(2026, 9, 3), Toronto));
     }
 

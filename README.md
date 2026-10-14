@@ -230,6 +230,16 @@ logic is in one place, here, and not in the web and Android clients.
 
   The rules are the same as the web dashboard (`dashboard-stats.ts`, `attention.ts`) and the Android app
   (`core/logic/Attention.kt`).
+- **Links.** Each card can have a `link`, a client route (D11). The clients keep the query string and the fragment.
+
+  | Card | Link |
+  | --- | --- |
+  | Net worth tile | `/money/net-worth` |
+  | Budgets tile, budget over its limit | `/money/budgets` |
+  | No recent import, statement to import | `/money/transactions#import` (Transactions, with the import open; T57) |
+  | Price change | `/money/subscriptions` |
+  | Transactions that no rule sorts | `/money/rules#unsorted` |
+  | Document that expires or expired | `/documents/<id>` |
 - **Failures:** a provider that throws, or does not answer in `Today:ProviderTimeout`, gives no cards. Its module has
   the status `Failed`, and the answer is still 200. When one finance report does not load, its tile has no value and
   the text "Could not load this", and the module has the status `Partial`.
