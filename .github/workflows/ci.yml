@@ -154,51 +154,6 @@ jobs:
         run: |
           for i in $(seq 1 60); do curl -sf http://localhost:5097/health/ready && exit 0; sleep 1; done
           exit 1
-      # T37: the host starts without the broker. /health/ready stays 200, with the events-broker check Degraded.
-      - name: Without the broker, the host works and /health/ready is Degraded
-        run: |
-          body=$(curl -sf http://localhost:5097/health/ready)
-          echo "$body"
-          echo "$body" | grep -q Degraded
-          for i in $(seq 1 30); do
-            # Into a file first: with pipefail, "grep -q" in a pipe can fail the step (SIGPIPE).
-            docker logs hestia-api > host.log 2>&1
-            grep -q "RabbitMQ broker is not reachable" host.log && exit 0
-            sleep 1
-          done
-          grep -i -E "rabbit|broker|events:" host.log | tail -20
-          exit 1
-      # On the server, the finance project runs the broker (its "events" profile) under this name. T37: it starts after
-      # the host, as a broker that comes back.
-      - name: The RabbitMQ broker for the finance events
-        run: |
-          docker run -d --name rabbitmq --network finance \
-            -e RABBITMQ_DEFAULT_USER=hestia -e RABBITMQ_DEFAULT_PASS=ci-rabbitmq-password rabbitmq:4-alpine
-          # Wait for the server before any CLI call: a CLI that runs first makes the Erlang cookie file as root,
-          # and the server then cannot read it.
-          for i in $(seq 1 60); do
-            docker logs rabbitmq > rabbitmq.log 2>&1
-            grep -q "Server startup complete" rabbitmq.log && exit 0
-            sleep 2
-          done
-          tail -40 rabbitmq.log
-          exit 1
-      # T37: the host connects without a restart, declares its queue, and listens to it again.
-      - name: The host connects when the broker is back (no restart)
-        run: |
-          healthy() {
-            body=$(curl -s http://localhost:5097/health/ready)
-            [[ "$body" == "Healthy" || "$body" == '{"status":"Healthy"'* ]]
-          }
-          for i in $(seq 1 90); do healthy && break; sleep 1; done
-          curl -s http://localhost:5097/health/ready; echo
-          docker logs hestia-api > host.log 2>&1
-          grep -i -E "rabbit|broker|events:" host.log | tail -20
-          healthy
-          grep -q "connected to the RabbitMQ broker after the start of the host" host.log
-          consumers=$(docker exec rabbitmq rabbitmqctl -q list_consumers queue_name)
-          echo "$consumers"
-          grep -q '^hestia.api.finance-events' <<< "$consumers"
       # T03: health, sign-in, the session cookie, a module, finance (the stub), sign-out, and 401 without a session.
       - name: Smoke test (docker/smoke-test.sh)
         run: docker/smoke-test.sh http://localhost:5097
@@ -293,6 +248,52 @@ jobs:
           done
           echo "$body"
           exit 1
+      # T37: the host started without the broker, and all steps above ran without it. /health/ready stays 200, with
+      # the events-broker check Degraded.
+      - name: Without the broker, the host works and /health/ready is Degraded
+        run: |
+          body=$(curl -s http://localhost:5097/health/ready)
+          echo "$body"
+          echo "$body" | grep -q Degraded
+          for i in $(seq 1 30); do
+            # Into a file first: with pipefail, "grep -q" in a pipe can fail the step (SIGPIPE).
+            docker logs hestia-api > host.log 2>&1
+            grep -q "RabbitMQ broker is not reachable" host.log && exit 0
+            sleep 1
+          done
+          grep -i -E "rabbit|broker|events:" host.log | tail -20
+          exit 1
+      # On the server, the finance project runs the broker (its "events" profile) under this name. T37: it starts after
+      # the host, as a broker that comes back.
+      - name: The RabbitMQ broker for the finance events
+        run: |
+          docker run -d --name rabbitmq --network finance \
+            -e RABBITMQ_DEFAULT_USER=hestia -e RABBITMQ_DEFAULT_PASS=ci-rabbitmq-password rabbitmq:4-alpine
+          # Wait for the server before any CLI call: a CLI that runs first makes the Erlang cookie file as root,
+          # and the server then cannot read it.
+          for i in $(seq 1 60); do
+            docker logs rabbitmq > rabbitmq.log 2>&1
+            grep -q "Server startup complete" rabbitmq.log && exit 0
+            sleep 2
+          done
+          tail -40 rabbitmq.log
+          exit 1
+      # T37: the host connects without a restart, declares its queue, and listens to it again.
+      - name: The host connects when the broker is back (no restart)
+        run: |
+          healthy() {
+            body=$(curl -s http://localhost:5097/health/ready)
+            [[ "$body" == "Healthy" || "$body" == '{"status":"Healthy"'* ]]
+          }
+          for i in $(seq 1 90); do healthy && break; sleep 1; done
+          curl -s http://localhost:5097/health/ready; echo
+          docker logs hestia-api > host.log 2>&1
+          grep -i -E "rabbit|broker|events:" host.log | tail -20
+          healthy
+          grep -q "connected to the RabbitMQ broker after the start of the host" host.log
+          consumers=$(docker exec rabbitmq rabbitmqctl -q list_consumers queue_name)
+          echo "$consumers"
+          grep -q '^hestia.api.finance-events' <<< "$consumers"
       - name: The host listens for the finance events (queue bound to the exchange)
         run: |
           for i in $(seq 1 30); do

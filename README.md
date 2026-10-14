@@ -91,7 +91,7 @@ Endpoints now:
 | Endpoint | Description |
 | --- | --- |
 | `GET /health/live` | The process answers. No sign-in. |
-| `GET /health/ready` | The host can serve requests: each module can connect to its database, finance answers its `/health/ready`, and the host can write to the documents folder (`documents-storage`, T59). The event checks (`events-broker`, `events-outbox`, T37) can only make it Degraded (still 200). No sign-in. |
+| `GET /health/ready` | The host can serve requests: each module can connect to its database, finance answers its `/health/ready`, and the host can write to the documents folder (`documents-storage`, T59). No sign-in. |
 | `POST /api/Auth/login`, `logout`, `change-password`, `sign-out-others`, `GET /api/Auth/me` | Identity module: sign-in (see [Sign-in](#sign-in)). |
 | `GET /api/sample/items?page=1&pageSize=20` | Sample module: a page of items. |
 | `POST /api/sample/items` | Sample module: make an item, `{ "name": "Kettle" }`. |
