@@ -126,12 +126,18 @@ A module event tells other modules that something changed (D7). See the README, 
 
    - Save once. If the consumer must save more than once, put all the saves in one transaction with the execution
      strategy (`db.Database.CreateExecutionStrategy()`), and call `TryReceiveAsync` inside it.
-   - A consumer that changes no data in your schema (for example, it only logs) needs no inbox.
+   - A consumer method that changes no data (for example, it only logs, or only asks for a check) needs no inbox. Mark
+     it with `[ChangesNoData("why")]` (namespace `Hestia.Platform.Events`). A test (`ConsumerInboxTests`, T52) checks
+     every consumer method in the modules: it must call `TryReceiveAsync`, give an `AlertTrigger` to the Alerts module,
+     or have this attribute.
    - A consumer that calls another system (for example a write to finance) cannot make that call part of the save.
      Make the call idempotent too (for example, send the `EventId` with it), or save first and call after.
-   - Two deliveries at the same time: one save fails on the inbox key, and its change does not commit. Wolverine
-     handles the failure as any consumer error (a retry finds the inbox row and does nothing). The other delivery's
-     change stays, so the data changes once.
+   - Two deliveries at the same time: one save fails on the inbox key, and its change does not commit. The host's
+     retry policy (T52) tries it again, and the retry finds the inbox row and does nothing. The other delivery's change
+     stays, so the data changes once.
+   - **Retries (T52):** a database failure (`DbUpdateException`, a transient PostgreSQL error) gets 3 more tries after
+     0.1 s, 0.5 s, and 2 s. Other errors get no retry. A retry runs all consumers of the event again, so each consumer
+     that changes data must use the inbox. See the README, "Consumer retries".
 6. In tests, each `HestiaApiFactory` records what the consumers get: `await factory.Events.WaitForAsync<DocumentAdded>()`.
    Add a test that delivers the same event twice and checks that the data changed once. Example:
    `tests/Hestia.Modules.Sample.Tests/IdempotentConsumerTests.cs`.

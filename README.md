@@ -535,8 +535,8 @@ and does not fit one outbox per module schema. It also does not work with the in
 **Finance events (RabbitMQ).** The finance service writes each event to its outbox in the same transaction as the change,
 and sends it to the fanout exchange `hestia.finance-events` after the commit. The host binds its queue
 `hestia.api.finance-events` to that exchange and acknowledges a message only after its consumers finish. A consumer that
-fails gets the Wolverine retries, then the message goes to the dead-letter queue. A consumer can get an event more than
-once, so make each consumer idempotent (see below). The events are in `Hestia.Contracts/Finance/FinanceEvents.cs`:
+fails gets the retries of the host (below), then the message goes to the dead-letter queue. A consumer can get an event
+more than once, so make each consumer idempotent (see below). The events are in `Hestia.Contracts/Finance/FinanceEvents.cs`:
 `TransactionsImported`, `TransactionChanged`, `BudgetLimitReached`, `BalanceRecorded`, and `SubscriptionPriceChanged`.
 
 **A consumer** is a Wolverine handler in a module project: a public class whose name ends in `Consumer`, with a public
@@ -557,6 +557,23 @@ false when the consumer handled the event already; else it adds the inbox row to
 `SaveChangesAsync` commits the change and the row together. `SampleItemCreatedConsumer` is the template, and
 `docs/new-module.md` (step 6) tells a module author what to do. Wolverine's own durable inbox is not used: it does not
 cover the in-process module events, and its row is not in the same transaction as the module's change.
+
+**Consumer retries (T52).** Without a policy, Wolverine 6 tries a message once, and the first failure moves it to the
+error queue. The host sets this policy (`Hestia.Api/Events/HestiaEvents.cs`, `ConsumerRetries`):
+
+- **A short database failure** (`DbUpdateException`, a transient PostgreSQL error, or the end of the EF Core execution
+  strategy retries) gets 3 more tries in the same delivery, after 0.1 s, 0.5 s, and 2 s. This also covers two
+  deliveries of one event at the same time: the save that fails on the inbox key tries again and finds the inbox row.
+- **After the last try, and at once for all other errors** (a bug does not go away with a retry), Wolverine moves the
+  message to the error queue and logs an error ("... was moved to the error queue"):
+  - finance events (RabbitMQ): the broker's dead-letter queue `wolverine-dead-letter-queue`;
+  - module events in memory (local queues): the host has no Wolverine message storage, so the message is dropped after
+    the error log;
+  - durable module events (the outbox sender, `InvokeAsync`): the sender gets the error, keeps the row, and tries again
+    later (see above).
+- A retry runs **all** consumers of the event again (Wolverine combines them in one handler), so each consumer that
+  changes data uses the inbox. A test (`ConsumerInboxTests`) checks every consumer method in the modules: it calls
+  `TryReceiveAsync`, gives an `AlertTrigger` to the Alerts module, or has `[ChangesNoData("why")]`.
 
 An event from a publisher with an older `Hestia.Contracts` (before 1.1.0) has no `EventId` on the wire. The consumer
 then gets a new id for each delivery, so the inbox cannot see a second delivery of that event. Update the publisher.
