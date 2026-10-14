@@ -70,8 +70,12 @@ app.UseRateLimiter();
 // Liveness: the process answers (no dependencies, so a database outage does not restart the host).
 app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false }).AllowAnonymous();
 // Readiness: the host can serve requests (each module database and the finance backend answer, and the checks that the
-// modules add, for example the documents volume).
-app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Tags.Contains(HealthTags.Ready) }).AllowAnonymous();
+// modules add, for example the documents volume). T64: the answer is JSON with the name and status of each check.
+app.MapHealthChecks("/health/ready", new HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains(HealthTags.Ready),
+    ResponseWriter = HealthResponse.WriteAsync
+}).AllowAnonymous();
 
 foreach (var module in modules)
 {

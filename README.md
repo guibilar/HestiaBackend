@@ -91,7 +91,7 @@ Endpoints now:
 | Endpoint | Description |
 | --- | --- |
 | `GET /health/live` | The process answers. No sign-in. |
-| `GET /health/ready` | The host can serve requests: each module can connect to its database, finance answers its `/health/ready`, and the host can write to the documents folder (`documents-storage`, T59). No sign-in. |
+| `GET /health/ready` | The host can serve requests: each module can connect to its database, finance answers its `/health/ready`, and the host can write to the documents folder (`documents-storage`, T59). JSON with the status of each check (see [Health checks](#health-checks)). No sign-in. |
 | `POST /api/Auth/login`, `logout`, `change-password`, `sign-out-others`, `GET /api/Auth/me` | Identity module: sign-in (see [Sign-in](#sign-in)). |
 | `GET /api/sample/items?page=1&pageSize=20` | Sample module: a page of items. |
 | `POST /api/sample/items` | Sample module: make an item, `{ "name": "Kettle" }`. |
@@ -105,6 +105,32 @@ All endpoints except the sign-in and the health checks need a signed-in user.
 In Development, the host sends the finance paths to `http://localhost:5096` (the finance backend's `dotnet run` address).
 Without a finance backend, `/health/ready` answers 503 and the finance paths answer 502. The modules still work.
 A local finance backend must run in the auth mode `Gateway`, with the development public key (see its README).
+
+### Health checks
+
+`/health/live` runs no checks: the process answers 200. Docker uses it, so a database or finance outage does not
+restart the container.
+
+`/health/ready` runs the readiness checks (tag `HealthTags.Ready`) and answers JSON (T64):
+
+```json
+{"status":"Unhealthy","checks":[{"name":"database","status":"Healthy"},{"name":"documents-storage","status":"Healthy"},{"name":"finance","status":"Unhealthy"}]}
+```
+
+- `status` is the worst status of all checks: `Healthy`, `Degraded`, or `Unhealthy`. The checks are in name order.
+- The status code: 200 for `Healthy` and `Degraded`, 503 for `Unhealthy`.
+- The endpoint is open (no sign-in), so the answer has only the names and the statuses: no descriptions, exception
+  messages, addresses, or paths. The log of the host has the reason: `docker compose logs hestia-api | grep -i "health check"`.
+
+| Check | Unhealthy when |
+| --- | --- |
+| `database` | A module cannot connect to the database. |
+| `finance` | Finance does not answer its `/health/ready` with a success status. |
+| `documents-storage` | The documents folder is missing, or the host cannot write to it (T59). |
+
+```bash
+curl -s http://localhost:5097/health/ready | jq -r '.checks[] | select(.status != "Healthy") | "\(.name): \(.status)"'
+```
 
 ## Sign-in
 
@@ -392,14 +418,17 @@ Alerts module checks all documents (a document starts to expire because time pas
 | `Ocr:Timeout` | `00:10:00` | The longest OCR of one file. |
 | `Ocr:PollInterval` | `00:01:00` | How often the worker looks for `Pending` documents without an upload signal. |
 | `Expiry:SoonDays`, `Expiry:ExpiredDays` | `30`, `7` | The windows of the expiry alerts. |
+| `FileCheck:Enabled` | `true` | `false`: no weekly file check (the command still works). |
+| `FileCheck:Interval` | `7.00:00:00` | The time between two file checks (at most 49 days). |
+| `FileCheck:FirstDelay` | `00:10:00` | The time from the start of the host to the first file check. |
 
 The frontend's nginx must let large uploads through: its `client_max_body_size` must be at least `MaxUploadSizeMb`.
 
 **Readiness check `documents-storage` (T59).** `/health/ready` answers 503 when the folder in `Documents:StoragePath`
 does not exist, or when the host cannot write and delete a small file in its `tmp/` folder. In Docker, the cause is a
 missing volume, or a volume that belongs to another user (it must belong to uid 1654). `/health/live` does not run
-this check, so a volume problem does not restart the container. To see which check failed, read the log of the host:
-`docker compose logs hestia-api | grep -i "health check"`.
+this check, so a volume problem does not restart the container. The answer of `/health/ready` names the check that
+failed; the log of the host has the reason (see [Health checks](#health-checks)).
 
 **Unused files: `documents-clean-files` (T59).** A stop between a document delete and its file delete can leave a file
 that no document uses. A stopped upload can leave a file in `tmp/`. The command finds these files:
@@ -412,10 +441,25 @@ that no document uses. A stopped upload can leave a file in `tmp/`. The command 
 Without `--delete`, it only prints the files. With `--delete`, it looks at each file again, then deletes it. It never
 touches other files on the volume (it prints them as `skipped`). The exit code is 1 when a delete failed.
 
+**Missing files: `--check-missing` (T64).** A `DocumentFiles` row whose file is not on the volume cannot download, and
+its OCR fails. With `--check-missing`, the command does only this check: it prints each such row
+(`missing   <key> (document <id>, file <id>)`), and deletes nothing. The exit code is 2 when it finds a missing file,
+0 when it finds none. To fix it, restore the file from a backup (the `hestia-<time>.documents` folder next to a dump),
+or delete the document. You cannot use `--check-missing` and `--delete` together.
+
 ```bash
-docker compose run --rm -T hestia-api documents-clean-files            # list
-docker compose run --rm -T hestia-api documents-clean-files --delete   # delete
+docker compose run --rm -T hestia-api documents-clean-files                  # list the unused files
+docker compose run --rm -T hestia-api documents-clean-files --delete         # delete them
+docker compose run --rm -T hestia-api documents-clean-files --check-missing  # list the rows without a file
 ```
+
+**The weekly file check (T64).** A background job in the host (`FileCheckWorker`) does both checks some minutes after
+the start, and then every 7 days. It deletes nothing. It logs a warning:
+
+- with the count and the bytes of the unused files: `Documents: 2 unused file(s) on the documents volume, 8423 bytes`;
+- for each row whose file is missing, with the document id and the file id.
+
+A clean volume gives one information line. To see the results: `docker compose logs hestia-api | grep "Documents:"`.
 
 The host can run at the same time. Make a backup first if you are not sure (`docker compose exec backup backup.sh once`).
 
