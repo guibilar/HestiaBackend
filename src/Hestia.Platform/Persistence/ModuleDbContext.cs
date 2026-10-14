@@ -1,5 +1,7 @@
 using Hestia.Platform.Events;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Hestia.Platform.Persistence;
 
@@ -21,7 +23,21 @@ public abstract class ModuleDbContext(DbContextOptions options, string schema) :
     // Durable events (T38): a save wrote outbox rows, so the sender gets a signal after the commit.
     private bool _outboxWritten;
 
+    // The host's clock (T70), found at the first use.
+    private TimeProvider? _time;
+
     public string Schema { get; } = schema;
+
+    /// <summary>
+    /// The clock for the times that this context writes: the outbox <c>RaisedAt</c> and <c>NextAttemptAt</c>, and the
+    /// inbox <c>HandledAt</c> (T70). It is the <see cref="TimeProvider"/> of the host's services, the same clock that the
+    /// outbox sender reads, so a test with a fixed clock gets its durable events. A context made without the host's
+    /// services uses the real clock.
+    /// </summary>
+    private TimeProvider Clock => _time ??=
+        this.GetService<IDbContextOptions>().FindExtension<CoreOptionsExtension>()?.ApplicationServiceProvider
+            ?.GetService<TimeProvider>()
+        ?? TimeProvider.System;
 
     /// <summary>
     /// Queues a module event. The event is published to its consumers in the host after the next
@@ -83,7 +99,7 @@ public abstract class ModuleDbContext(DbContextOptions options, string schema) :
         {
             return false;
         }
-        inbox.Add(new InboxEntry { EventId = eventId, Consumer = consumer, HandledAt = DateTimeOffset.UtcNow });
+        inbox.Add(new InboxEntry { EventId = eventId, Consumer = consumer, HandledAt = Clock.GetUtcNow() });
         return true;
     }
 
@@ -123,7 +139,7 @@ public abstract class ModuleDbContext(DbContextOptions options, string schema) :
         }
 
         // All rows first: an event that cannot be stored fails the save before any row is added.
-        var now = DateTimeOffset.UtcNow;
+        var now = Clock.GetUtcNow();
         var rows = _raised.Select(@event => new OutboxMessage
         {
             EventType = serializer.TypeName(@event),

@@ -3,6 +3,7 @@ using Hestia.Platform.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Hestia.Platform.Tests;
 
@@ -28,6 +29,38 @@ public class EventInboxTests
         var entry = Assert.Single(later.Set<InboxEntry>());
         Assert.Equal(eventId, entry.EventId);
         Assert.Equal(Consumer, entry.Consumer);
+    }
+
+    [Fact]
+    public async Task HandledAt_IsTheTimeOfTheHostClock()
+    {
+        // T70: the context uses the TimeProvider of the host's services.
+        var now = new DateTimeOffset(2021, 3, 4, 5, 6, 7, TimeSpan.Zero);
+        await using var services = new ServiceCollection().AddSingleton<TimeProvider>(new FixedClock(now)).BuildServiceProvider();
+        var options = new DbContextOptionsBuilder<InboxDbContext>().UseInMemoryDatabase(_database)
+            .UseApplicationServiceProvider(services).Options;
+        await using (var db = new InboxDbContext(options))
+        {
+            Assert.True(await db.TryReceiveAsync(Guid.CreateVersion7(), Consumer));
+            await db.SaveChangesAsync();
+        }
+
+        await using var read = Inbox();
+        Assert.Equal(now, Assert.Single(read.Set<InboxEntry>()).HandledAt);
+    }
+
+    [Fact]
+    public async Task HandledAt_WithoutAHostClock_IsTheRealTime()
+    {
+        var before = DateTimeOffset.UtcNow;
+        await using (var db = Inbox())
+        {
+            Assert.True(await db.TryReceiveAsync(Guid.CreateVersion7(), Consumer));
+            await db.SaveChangesAsync();
+        }
+
+        await using var read = Inbox();
+        Assert.InRange(Assert.Single(read.Set<InboxEntry>()).HandledAt, before, DateTimeOffset.UtcNow);
     }
 
     [Fact]
@@ -118,6 +151,11 @@ public class EventInboxTests
     }
 
     private InboxDbContext Inbox() => new(Options<InboxDbContext>());
+
+    private sealed class FixedClock(DateTimeOffset now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
+    }
 
     private DbContextOptions<T> Options<T>() where T : DbContext =>
         new DbContextOptionsBuilder<T>().UseInMemoryDatabase(_database).Options;

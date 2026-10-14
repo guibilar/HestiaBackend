@@ -203,6 +203,10 @@ modules. Today shows it, and the clients can poll it. The Documents module is th
   it at the end. A test can set its own folder.
 - **Times in tests:** PostgreSQL keeps microseconds, .NET keeps 100 ns. Compare a time that went through the database
   with a time from the database, not with the value that the code made.
+- **The clock (T70):** take `TimeProvider` for every time that a test can need to fix, and do not read
+  `DateTimeOffset.UtcNow`. `ModuleDbContext` writes the outbox and inbox times with the host's `TimeProvider`, the same
+  clock that the outbox sender reads. A test can use a fixed clock in the past or in the future:
+  `services.RemoveAll<TimeProvider>()`, then `services.AddSingleton<TimeProvider>(clock)`.
 
 ## 10. Check
 
