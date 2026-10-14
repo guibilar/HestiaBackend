@@ -22,7 +22,7 @@ public sealed class TestClock(DateTimeOffset now) : TimeProvider
 /// <summary>The host with all modules, finance from <see cref="FakeFinance"/>, and only the finance alert source.</summary>
 public static class AlertsHost
 {
-    public const string Alerts = "/api/alerts";
+    public const string AlertsPath = "/api/alerts";
 
     public static HestiaApiFactory Start(FakeFinance finance, TimeProvider? clock = null,
         Dictionary<string, string?>? settings = null, Action<IServiceCollection>? services = null)
@@ -55,7 +55,7 @@ public static class AlertsHost
 
     public static async Task<AlertList> GetAlertsAsync(HttpClient client, bool refresh = false)
     {
-        var response = await client.GetAsync(refresh ? $"{Alerts}?refresh=true" : Alerts);
+        var response = await client.GetAsync(refresh ? $"{AlertsPath}?refresh=true" : AlertsPath);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         return await response.ReadAsync<AlertList>();
     }

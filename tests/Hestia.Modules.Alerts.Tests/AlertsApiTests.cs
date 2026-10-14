@@ -29,7 +29,7 @@ public sealed class AlertsApiTests
         await using var finance = await FakeFinance.StartAsync();
         await using var factory = new HestiaApiFactory(finance.HostSettings(), signedIn: false);
 
-        var response = await factory.CreateClient().GetAsync(Alerts);
+        var response = await factory.CreateClient().GetAsync(AlertsPath);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         Assert.Empty(finance.Requests);
