@@ -100,7 +100,7 @@ public class FinanceEventTests
     }
 
     /// <summary>Publishes like the finance service: every finance event to the fanout exchange.</summary>
-    private static async Task<IHost> StartFinanceStandInAsync(params Type[] moreEventTypes)
+    internal static async Task<IHost> StartFinanceStandInAsync(params Type[] moreEventTypes)
     {
         var builder = Host.CreateApplicationBuilder();
         builder.UseWolverine(wolverine =>
@@ -120,7 +120,7 @@ public class FinanceEventTests
         return host;
     }
 
-    private static async Task PublishAsync(IHost finance, params object[] events)
+    internal static async Task PublishAsync(IHost finance, params object[] events)
     {
         await using var scope = finance.Services.CreateAsyncScope();
         var bus = scope.ServiceProvider.GetRequiredService<IMessageBus>();

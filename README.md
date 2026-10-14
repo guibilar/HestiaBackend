@@ -91,7 +91,7 @@ Endpoints now:
 | Endpoint | Description |
 | --- | --- |
 | `GET /health/live` | The process answers. No sign-in. |
-| `GET /health/ready` | The host can serve requests: each module can connect to its database, finance answers its `/health/ready`, and the host can write to the documents folder (`documents-storage`, T59). No sign-in. |
+| `GET /health/ready` | The host can serve requests: each module can connect to its database, finance answers its `/health/ready`, and the host can write to the documents folder (`documents-storage`, T59). The event checks (`events-broker`, `events-outbox`, T37) can only make it Degraded (still 200). No sign-in. |
 | `POST /api/Auth/login`, `logout`, `change-password`, `sign-out-others`, `GET /api/Auth/me` | Identity module: sign-in (see [Sign-in](#sign-in)). |
 | `GET /api/sample/items?page=1&pageSize=20` | Sample module: a page of items. |
 | `POST /api/sample/items` | Sample module: make an item, `{ "name": "Kettle" }`. |
@@ -520,7 +520,8 @@ the event (Wolverine `InvokeAsync`), and deletes the row when they finished.
   idempotent (the inbox, below), so the data changes once.
 - **Failures:** a consumer that throws keeps the row. The sender tries again after `RetryDelay`, doubled after each
   failure (up to 10 minutes). After `MaxAttempts` failures, it stops and keeps the row with its last error
-  (`LastError`), and logs an error. To send the row again, set `Attempts` to 0 in the database.
+  (`LastError`), and logs an error. The readiness check `events-outbox` is then Degraded. To send the row again, run
+  `retry-outbox` (see [Event health](#event-health-t37)).
 - **Order:** the sender sends the rows of a module in the order of the saves. A failed row does not stop the next ones,
   so a consumer must not depend on the order.
 - A commit wakes the sender at once. It also reads the outboxes every `PollInterval`.
@@ -588,10 +589,42 @@ Settings (section `Events`):
 | `Outbox:PollInterval` | `00:00:05` | How often the sender reads the outboxes without a commit signal. |
 | `Outbox:RetryDelay` | `00:00:05` | The wait after the first failed delivery of an event. It doubles after each failure, up to 10 minutes (a longer value stays as it is). |
 | `Outbox:MaxAttempts` | `10` | After this many failed deliveries, the sender keeps the row and stops. |
+| `Outbox:WarnAfter` | `00:10:00` | The readiness check `events-outbox` is Degraded when an outbox row is older than this (T37). |
+| `Broker:StartTimeout` | `00:00:05` | How long the start waits for the broker. Then the host starts without it, and connects later (T37). |
+| `Broker:ReconnectInterval` | `00:00:15` | How often the host tries the broker again, and starts a listener that does not run (T37). |
 
-The broker runs in the finance project (its `events` profile), on the network `finance`. If the broker is down when the
-host starts, the host starts without the finance events and logs an error: restart the host when the broker is back.
-Until a module consumes a finance event, the host takes it from the queue and drops it (or logs it, with `LogAll`).
+The broker runs in the finance project (its `events` profile), on the network `finance`. Until a module consumes a
+finance event, the host takes it from the queue and drops it (or logs it, with `LogAll`).
+
+### Event health (T37)
+
+**The broker is down when the host starts.** The host waits `Broker:StartTimeout` (5 seconds) for the broker, then
+starts without the finance events and logs the error. Finance keeps its events in its outbox meanwhile. The
+reconnector (`Hestia.Api/Events/BrokerConnection.cs`, `BrokerReconnector`) tries the broker every
+`Broker:ReconnectInterval` (15 seconds). When the broker answers, it declares the exchange, the queue, and the binding,
+and starts the listener. No restart is necessary. It logs `Events: the RabbitMQ broker is not reachable` once, and
+`Events: connected to the RabbitMQ broker after the start of the host` when it connects.
+
+**The broker stops later.** The RabbitMQ client recovers the connection itself when the broker is back, and Wolverine
+rebuilds its channels. The messages stay in the queue of the host, and finance keeps new events in its outbox.
+
+**Readiness checks.** Both are **Degraded**, never Unhealthy, so `/health/ready` stays 200 and the apps still work:
+
+| Check | Degraded when |
+| --- | --- |
+| `events-broker` | The host has no connection to the broker, or its listener for the finance events does not run. Healthy when `RabbitMq` is empty. |
+| `events-outbox` | A durable module outbox has a row that failed `Outbox:MaxAttempts` times, or a row older than `Outbox:WarnAfter`. The log line of the check names each schema and its counts. |
+
+**Stuck outbox rows: `retry-outbox`.** The command gives the rows that failed `Outbox:MaxAttempts` times a new start
+(`Attempts` 0, the next try now). The last error stays in `LastError`. The running host sends them at its next poll.
+Fix the cause first (the error is in the log of the host, and in `LastError`).
+
+```bash
+docker compose run --rm -T hestia-api retry-outbox documents   # one module (its schema)
+docker compose run --rm -T hestia-api retry-outbox all         # every module with durable events
+```
+
+It prints the count for each schema, for example `documents: 2 row(s) reset`. The exit code is 1 for an unknown schema.
 
 ### The contracts package
 

@@ -26,6 +26,12 @@ public sealed class OutboxOptions
 
     /// <summary>After this many failed deliveries, the sender stops and keeps the row (with its last error).</summary>
     public int MaxAttempts { get; set; } = 10;
+
+    /// <summary>
+    /// The readiness check <c>events-outbox</c> is Degraded when a row is older than this (T37): the sender is off, or
+    /// it fails again and again.
+    /// </summary>
+    public TimeSpan WarnAfter { get; set; } = TimeSpan.FromMinutes(10);
 }
 
 /// <summary>
