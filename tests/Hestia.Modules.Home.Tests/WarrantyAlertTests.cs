@@ -35,7 +35,7 @@ public class WarrantyAlertTests
         var list = await Wait.UntilAsync(() => AlertsAsync(host), l => HomeAlerts(l).Count == 2);
 
         var alerts = HomeAlerts(list);
-        Assert.Equal(new[] { $"home.warranty-ending.{today.Id}", $"home.warranty-ending.{soon.Id}" }, alerts.Select(a => a.Id).Order());
+        Assert.Equal(new[] { $"home.warranty-ending.{today.Id}", $"home.warranty-ending.{soon.Id}" }.Order(), alerts.Select(a => a.Id).Order());
         var alert = Assert.Single(alerts, a => a.Id == $"home.warranty-ending.{soon.Id}");
         Assert.Equal(("warranty-ending", "Warranty ends soon", "The warranty of {item} ends on {date}", AlertSeverity.Neutral, $"/home/items/{soon.Id}"),
             (alert.Kind, alert.Title, alert.Text, alert.Severity, alert.Link));

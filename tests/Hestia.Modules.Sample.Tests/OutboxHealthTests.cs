@@ -161,7 +161,7 @@ public class OutboxHealthTests
         var (exitCode, output) = await RunAsync(factory, arguments);
 
         Assert.Equal(1, exitCode);
-        Assert.Contains("documents, sample", output);
+        Assert.Contains("documents, home, sample", output);
     }
 
     private static async Task<HealthReportEntry> CheckAsync(HestiaApiFactory factory)

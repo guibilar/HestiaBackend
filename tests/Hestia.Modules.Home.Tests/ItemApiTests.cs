@@ -116,7 +116,8 @@ public class ItemApiTests
         Assert.Equal(new[] { "Dishwasher" }, await Names($"room={kitchen.Id}&tag=insured&warranty=expiring"));
 
         var page = await host.ListAsync("page=2&pageSize=2");
-        Assert.Equal((5, 3, new[] { "Fridge", "Laptop" }), (page.TotalCount, page.TotalPages, page.Items.Select(i => i.Name).ToArray()));
+        Assert.Equal((5, 3), (page.TotalCount, page.TotalPages));
+        Assert.Equal(new[] { "Fridge", "Laptop" }, page.Items.Select(i => i.Name));
 
         await HomeHost.AssertBadRequestAsync(await host.Client.GetAsync($"{Items}?room=kitchen"), "room");
         await HomeHost.AssertBadRequestAsync(await host.Client.GetAsync($"{Items}?warranty=soon"), "warranty");
