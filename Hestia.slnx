@@ -21,6 +21,10 @@
     <Project Path="src/Modules/Sample/Hestia.Modules.Sample/Hestia.Modules.Sample.csproj" />
     <Project Path="src/Modules/Sample/Hestia.Modules.Sample.Contracts/Hestia.Modules.Sample.Contracts.csproj" />
   </Folder>
+  <Folder Name="/src/Modules/Tasks/">
+    <Project Path="src/Modules/Tasks/Hestia.Modules.Tasks/Hestia.Modules.Tasks.csproj" />
+    <Project Path="src/Modules/Tasks/Hestia.Modules.Tasks.Contracts/Hestia.Modules.Tasks.Contracts.csproj" />
+  </Folder>
   <Folder Name="/src/Modules/Today/">
     <Project Path="src/Modules/Today/Hestia.Modules.Today/Hestia.Modules.Today.csproj" />
     <Project Path="src/Modules/Today/Hestia.Modules.Today.Contracts/Hestia.Modules.Today.Contracts.csproj" />
@@ -32,6 +36,7 @@
     <Project Path="tests/Hestia.Modules.Documents.Tests/Hestia.Modules.Documents.Tests.csproj" />
     <Project Path="tests/Hestia.Modules.Identity.Tests/Hestia.Modules.Identity.Tests.csproj" />
     <Project Path="tests/Hestia.Modules.Sample.Tests/Hestia.Modules.Sample.Tests.csproj" />
+    <Project Path="tests/Hestia.Modules.Tasks.Tests/Hestia.Modules.Tasks.Tests.csproj" />
     <Project Path="tests/Hestia.Modules.Today.Tests/Hestia.Modules.Today.Tests.csproj" />
     <Project Path="tests/Hestia.Platform.Tests/Hestia.Platform.Tests.csproj" />
     <Project Path="tests/Hestia.Testing/Hestia.Testing.csproj" />

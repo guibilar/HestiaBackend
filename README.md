@@ -23,6 +23,7 @@ src/
     Alerts/                         the "Needs attention" list of all modules: rules, store, /api/alerts (T15)
     Documents/                      documents: files on a volume, OCR, full-text search, expiry, links (T11)
     Identity/                       sign-in: users, sessions, the read-only token, /api/Auth (T03)
+    Tasks/                          to-dos and repeated home tasks: due dates, completions, links, alerts (T19)
     Today/                          the Today screen: /api/today, the cards of all modules (T08)
     Sample/
       Hestia.Modules.Sample/            internal: Domain, Application, Infrastructure, Endpoints
@@ -36,6 +37,7 @@ tests/
   Hestia.Modules.Documents.Tests/   with small sample files (Samples/) for the upload and OCR tests
   Hestia.Modules.Identity.Tests/
   Hestia.Modules.Sample.Tests/
+  Hestia.Modules.Tasks.Tests/
   Hestia.Modules.Today.Tests/
 ```
 
@@ -476,6 +478,80 @@ The host can run at the same time. Make a backup first if you are not sure (`doc
 **Errors.** A request body that cannot be read (for example `"kind": "Spaceship"`, or JSON that is not complete) gets
 400 with problem details, in Development and in Production. A body over the size limit of Kestrel gets 413, and a body
 with the wrong content type gets 415 (T59).
+
+## Tasks
+
+The Tasks module (T19, schema `tasks`) keeps to-dos and repeated home tasks, for example "Water the plants, every 4
+days" or "Smoke detector batteries, every 12 months". A task has a title, notes, a due date (optional), tags, a manual
+order inside a day, an optional repeat, completions, and links (to documents and finance transactions).
+
+**Endpoints** (prefix `/api/tasks`; a read-only user can call the GET endpoints only):
+
+| Endpoint | Description |
+| --- | --- |
+| `POST /` | A new task, JSON: `title` (required, at most 200 characters), `notes`, `dueOn` (`yyyy-MM-dd`), `tags`, `sortOrder`, `repeat` (`{ "every": 4, "unit": "Days", "mode": "FromCompletion" }`), `links` (`[{ "kind": "Documents.Document", "targetId": "<id>" }]`). Answers 201. |
+| `GET /?status=&tag=&due=&q=&page=1&pageSize=20` | A page of tasks: by due date (tasks without one last), then `sortOrder`, then the oldest first. `status`: `Open` or `Done`. `due`: `today`, `overdue` (open and due before today), `upcoming` (the next 7 days after today), `none` (no due date). `q`: words in the title, the notes, or the tags. |
+| `GET /{id}` | One task, with its last 10 completions (newest first). |
+| `PUT /{id}` | New details (all of them, JSON, as for `POST /` without `links`). The status, the completions, and the links stay. |
+| `DELETE /{id}` | Deletes the task, its completions, and its links. |
+| `POST /{id}/done` | Done. 409 when the task is done already. |
+| `POST /{id}/undo` | Undoes the last done. 409 when there is nothing to undo. |
+| `POST /{id}/links`, `DELETE /{id}/links/{linkId}` | A link, `{ "kind": "Documents.Document", "targetId": "<document id>" }` or `Money.Transaction`. |
+| `GET /by-link?kind=Documents.Document&id=<document id>` | The tasks of one thing. |
+| `GET /summary` | The counts of open tasks: `dueToday`, `overdue`, `upcoming` (7 days), with `date`. For the badges. |
+
+```bash
+curl -b cookies -H 'Content-Type: application/json' \
+  -d '{"title":"Water the plants","repeat":{"every":4,"unit":"Days","mode":"FromCompletion"}}' http://localhost:5097/api/tasks
+curl -b cookies -X POST http://localhost:5097/api/tasks/<id>/done
+curl -b cookies 'http://localhost:5097/api/tasks?due=overdue'
+```
+
+**Days.** "Today", "overdue", and the day a task was done are in the time zone `Tasks:TimeZone` (Docker: from `TZ`, as
+`Today:TimeZone` and `Alerts:TimeZone`). There are no times of day. Use the same zone for all three.
+
+**Done and repeat.**
+
+- A task without a repeat: done sets `status` `Done` and `doneAt`.
+- A repeated task always has a due date (without one, it is due today). Done keeps it `Open` and moves `dueOn`:
+  - `FromDueDate` (the default): a fixed schedule from the due date, for example the 1st of each month. A task that is
+    done late moves to the first date of the schedule after the day it was done, so it is not overdue again at once.
+    Done early keeps the schedule.
+  - `FromCompletion`: from the day it was done, for example "water the plants 4 days after the last time".
+  - Months and years keep the day of the month: Jan 31 + 1 month is Feb 28 (Feb 29 in a leap year), and the next month
+    is Mar 31 again. Feb 29 every year is Feb 28 in the other years.
+- Each done adds a completion (the time, and the due date that was done), so the clients can show "last done"
+  (`lastDoneAt`) and the history.
+- Undo removes the last completion: a done task is open again, and a repeated task gets back the due date of that
+  completion. Undo again removes the one before.
+
+**Links.** As in Documents: a kind and an id, both text. `Documents.Document` is checked with the Documents module
+(`IDocumentQueries`); `Money.Transaction` is checked with finance as the signed-in user (finance down: 502). When a
+document is deleted, the consumer `DocumentDeletedConsumer` removes its links (with the inbox); the tasks stay.
+
+**Events (durable, T38).** `TaskCreated`, `TaskChanged` (`Change`: `Details` or `Links`), `TaskCompleted` (with the due
+date that was done and, for a repeated task, `NextDueOn`), `TaskReopened`, and `TaskDeleted`, in
+`Hestia.Modules.Tasks.Contracts`. Other modules read more with `ITaskQueries` (`FindAsync`, `ListByLinkAsync`).
+
+**Today and alerts.**
+
+- Tile `tasks.due-today` ("Tasks"): the count of open tasks due today, with the overdue count as `{overdue}` in the
+  text (severity Warning when there are overdue tasks). Link `/tasks`.
+- Alerts (source `Tasks.Due`): `tasks.overdue.<id>` (Warning, link `/tasks/<id>`) for each open task with a due date
+  before today, with the title, the due date, and the days late. With more than 5 overdue tasks
+  (`Tasks:MaxOverdueAlerts`), one alert `tasks.overdue-many` ("7 tasks are overdue", link `/tasks?due=overdue`) takes
+  their place. After each task event, `TaskAlertsConsumer` asks for a check, so done, a new due date, and a delete
+  resolve the alert at once. A task that becomes overdue because time passes gets its alert at the next check of the
+  Alerts module (every 15 minutes).
+
+| Setting (`Tasks` section) | Default | Description |
+| --- | --- | --- |
+| `TimeZone` | `UTC` (appsettings: `America/Toronto`) | The IANA time zone of the days. Docker: `TZ`. |
+| `UpcomingDays` | `7` | The days after today that `due=upcoming` and the summary count. |
+| `MaxOverdueAlerts` | `5` | The most overdue tasks with an alert each. |
+
+**Backups.** The `tasks` schema is in the Hestia database, so the backup job (T24) dumps it with the other modules. The
+CI backup check restores a task with its completion (`docker/ci/backup-restore-check.sh`).
 
 ### OpenAPI document
 

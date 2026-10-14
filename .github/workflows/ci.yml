@@ -203,7 +203,9 @@ jobs:
           body=$(curl -sf -H "Cookie: $SESSION_COOKIE" http://localhost:5097/api/today)
           echo "$body" | jq -c '{date, modules, tiles: [.cards[] | select(.type == "Tile") | .id]}'
           echo "$body" | jq -e '.modules[0].module == "Money" and .modules[0].status == "Partial"
-            and ([.cards[] | select(.type == "Tile") | .id] == ["money.spent-this-month", "money.left-over-this-month", "money.net-worth", "money.budgets"])'
+            and ([.cards[] | select(.type == "Tile" and .module == "Money") | .id] == ["money.spent-this-month", "money.left-over-this-month", "money.net-worth", "money.budgets"])'
+          # Other modules show their tiles after Money (T19: Tasks).
+          echo "$body" | jq -e '[.cards[] | select(.type == "Tile") | .module] | .[0:4] == ["Money", "Money", "Money", "Money"]'
       # T11: a document with a scanned PDF (no text layer) and a PNG. The OCR runs in the container, in the background.
       - name: Documents upload, background OCR in the image, search, and download
         run: |
@@ -268,6 +270,23 @@ jobs:
           echo "$output" | grep -q "missing   $key (document "
           output=$(docker compose run --rm -T hestia-api documents-clean-files --check-missing)
           echo "$output" | grep -q 'No missing files.'
+      # T19: a repeated task in the image: create, done (the due date moves), undo, the summary, and the Today tile.
+      - name: Tasks add, done, undo, summary, and the Today tile
+        run: |
+          body=$(curl -sf -H "Cookie: $SESSION_COOKIE" -H 'Content-Type: application/json' \
+            -d '{"title":"CI plants","dueOn":"2026-01-01","repeat":{"every":4,"unit":"Days","mode":"FromCompletion"}}' \
+            http://localhost:5097/api/tasks)
+          echo "$body" | jq -c '{id, dueOn, status, repeat}'
+          id=$(echo "$body" | jq -r .id)
+          body=$(curl -sf -H "Cookie: $SESSION_COOKIE" -X POST "http://localhost:5097/api/tasks/$id/done")
+          echo "$body" | jq -c '{dueOn, status, completions}'
+          echo "$body" | jq -e '.status == "Open" and .dueOn != "2026-01-01" and (.completions | length) == 1
+            and .completions[0].dueOn == "2026-01-01"'
+          curl -sf -H "Cookie: $SESSION_COOKIE" -X POST "http://localhost:5097/api/tasks/$id/undo" \
+            | jq -e '.dueOn == "2026-01-01" and (.completions | length) == 0'
+          curl -sf -H "Cookie: $SESSION_COOKIE" http://localhost:5097/api/tasks/summary | tee /dev/stderr | jq -e '.overdue >= 1'
+          curl -sf -H "Cookie: $SESSION_COOKIE" http://localhost:5097/api/today \
+            | jq -e '[.cards[] | select(.id == "tasks.due-today")] | length == 1'
       - name: A module event reaches its consumer after the commit (in process)
         run: |
           curl -sf -H "Cookie: $SESSION_COOKIE" -X POST -H 'Content-Type: application/json' -d '{"name":"CI kettle"}' \

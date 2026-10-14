@@ -15,6 +15,8 @@ COPY ["src/Modules/Identity/Hestia.Modules.Identity/Hestia.Modules.Identity.cspr
 COPY ["src/Modules/Identity/Hestia.Modules.Identity.Contracts/Hestia.Modules.Identity.Contracts.csproj", "src/Modules/Identity/Hestia.Modules.Identity.Contracts/"]
 COPY ["src/Modules/Sample/Hestia.Modules.Sample/Hestia.Modules.Sample.csproj", "src/Modules/Sample/Hestia.Modules.Sample/"]
 COPY ["src/Modules/Sample/Hestia.Modules.Sample.Contracts/Hestia.Modules.Sample.Contracts.csproj", "src/Modules/Sample/Hestia.Modules.Sample.Contracts/"]
+COPY ["src/Modules/Tasks/Hestia.Modules.Tasks/Hestia.Modules.Tasks.csproj", "src/Modules/Tasks/Hestia.Modules.Tasks/"]
+COPY ["src/Modules/Tasks/Hestia.Modules.Tasks.Contracts/Hestia.Modules.Tasks.Contracts.csproj", "src/Modules/Tasks/Hestia.Modules.Tasks.Contracts/"]
 COPY ["src/Modules/Today/Hestia.Modules.Today/Hestia.Modules.Today.csproj", "src/Modules/Today/Hestia.Modules.Today/"]
 COPY ["src/Modules/Today/Hestia.Modules.Today.Contracts/Hestia.Modules.Today.Contracts.csproj", "src/Modules/Today/Hestia.Modules.Today.Contracts/"]
 RUN dotnet restore "src/Hestia.Api/Hestia.Api.csproj"

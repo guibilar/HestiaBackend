@@ -220,7 +220,25 @@ modules. Today shows it, and the clients can poll it. The Documents module is th
   clock that the outbox sender reads. A test can use a fixed clock in the past or in the future:
   `services.RemoveAll<TimeProvider>()`, then `services.AddSingleton<TimeProvider>(clock)`.
 
-## 10. Check
+## 10. Tips from the Tasks module (T19)
+
+- **A link to another module's thing:** keep the kind and the id as text (as `DocumentLink` and `TaskLink`). Check that
+  the thing exists through the other module's query interface (for example `IDocumentQueries.FindAsync`), never through
+  its tables. Reference only its `.Contracts` project.
+- **Another module's delete:** consume its event (for example `DocumentDeleted`) with the inbox, and remove your links
+  to the thing. Call `SaveChangesAsync` also when nothing changed, so the inbox row commits.
+- **Alert rules that depend on a count** (for example "one alert per overdue task, or one alert for many"): a check of
+  one target cannot know the count. Check everything: pass `target: null` to `IAlertChecks.CheckAsync`, with the
+  trigger, and cover all the prefixes of the source.
+- **Your own days:** when "today" matters (due dates), take a `TimeZone` setting for your module (Docker: from `TZ`),
+  and compute the day from the host's `TimeProvider`. In an alert source, use `context.Now` in your time zone, so the
+  Alerts module's clock and yours agree. Use the same day in your Today provider and your endpoints.
+- **Enum names that clash:** do not name an enum `TaskStatus` or a class `Task` in a module (they clash with
+  `System.Threading.Tasks`). The Tasks module uses `TaskItem` and `TaskItemStatus`.
+- **Tests with a moving clock:** a `TimeProvider` with a settable `Now` (see `TestClock` in the Tasks tests) tests a task
+  that becomes overdue as time passes: move the clock, then ask for `GET /api/alerts?refresh=true`.
+
+## 11. Check
 
 - `dotnet build` has no warnings.
 - `dotnet test` passes, with the architecture tests.

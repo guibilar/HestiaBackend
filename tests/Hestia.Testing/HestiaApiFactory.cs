@@ -154,11 +154,17 @@ public class HestiaApiFactory(
         return await action(scope.ServiceProvider);
     }
 
+    /// <summary>
+    /// One in-memory database per module schema, as the schemas keep the modules apart in PostgreSQL. The in-memory store
+    /// finds a table by the name of its entity type, so two modules in one in-memory database share the tables of the
+    /// platform types (<c>EventInbox</c>, <c>EventOutbox</c>), and a write to one module's inbox after another module's
+    /// fails (T19: the Tasks and the Alerts consumers of <c>DocumentDeleted</c>).
+    /// </summary>
     private sealed class InMemoryDatabaseOptionsConfigurator(string databaseName, InMemoryDatabaseRoot root)
         : IDatabaseOptionsConfigurator
     {
         public void Configure(DbContextOptionsBuilder options, string schema) =>
-            options.UseInMemoryDatabase(databaseName, root);
+            options.UseInMemoryDatabase($"{databaseName}_{schema}", root);
     }
 }
 
