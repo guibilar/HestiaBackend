@@ -99,6 +99,12 @@ A module event tells other modules that something changed (D7). See the README, 
 4. Consume an event (from your module, another module, or finance) with a public class whose name ends in `Consumer`,
    with a public `Consume(TEvent message, CancellationToken cancellationToken)` method. Example:
    `SampleItemCreatedConsumer`.
+   - **After you add a consumer, run `HandlerCompileTests`** (`tests/Hestia.Api.Tests`, T47; CI runs it too). Wolverine
+     compiles a consumer at its first message, so a dependency that it cannot build fails only on the server. The test
+     compiles every consumer now, and names the consumer and the dependency. A dependency registered with a lambda
+     (`AddDbContext`, a typed `HttpClient`, a factory) needs `AlwaysUseServiceLocationFor<T>()` in `HestiaEventsSetup`
+     (`src/Hestia.Api/Events/HestiaEvents.cs`), or a registration by type. Each module `DbContext` and `IFinanceClient`
+     have it already.
 5. **Make each consumer idempotent.** An event can come more than once (RabbitMQ delivers again after a failure), and
    the consumer must change the data only once (T36). Use the module's event inbox:
    1. In `OnModelCreating` of your DbContext, call `modelBuilder.AddEventInbox();` (namespace `Hestia.Platform.Events`).
