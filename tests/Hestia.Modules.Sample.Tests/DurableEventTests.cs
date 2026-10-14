@@ -8,6 +8,7 @@ using Hestia.Platform.Events;
 using Hestia.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Wolverine;
 
 namespace Hestia.Modules.Sample.Tests;
@@ -49,6 +50,55 @@ public class DurableEventTests
         var activity = await Eventually(async () => await client.GetFromJsonAsync<SampleActivityDto>("/api/sample/activity"),
             dto => dto?.ItemsCreated == 1);
         Assert.Equal(new SampleActivityDto(1, "Kettle"), activity);
+    }
+
+    [Theory]
+    [InlineData(2020)]
+    [InlineData(2040)]
+    public async Task DurableEvent_WithAFixedClock_ReachesItsConsumers(int year)
+    {
+        // T70: the save and the sender use the same clock, also when it is far from the real time.
+        var now = new DateTimeOffset(year, 6, 15, 12, 0, 0, TimeSpan.Zero);
+        await using var factory = new HestiaApiFactory(Durable, services =>
+        {
+            services.RemoveAll<TimeProvider>();
+            services.AddSingleton<TimeProvider>(new FixedClock(now));
+        });
+        var client = factory.CreateClient();
+
+        var created = await (await client.PostAsJsonAsync(Items, new CreateSampleItemRequest("Kettle"))).ReadAsync<SampleItemDto>();
+
+        var received = await factory.Events.WaitForAsync<SampleItemCreated>();
+        Assert.Equal((created.Id, now), (received.ItemId, received.OccurredAt));
+        await Eventually(() => OutboxAsync(factory), rows => rows.Count == 0);
+        Assert.Empty(await OutboxAsync(factory));
+        var activity = await Eventually(async () => await client.GetFromJsonAsync<SampleActivityDto>("/api/sample/activity"),
+            dto => dto?.ItemsCreated == 1);
+        Assert.Equal(1, activity!.ItemsCreated);
+        var handledAt = await factory.WithScopeAsync(services => services.GetRequiredService<SampleDbContext>()
+            .Set<InboxEntry>().AsNoTracking().Select(entry => entry.HandledAt).SingleAsync());
+        Assert.Equal(now, handledAt);
+    }
+
+    [Fact]
+    public async Task DurableEvent_WithAStoppedSender_HasTheTimesOfTheFixedClock()
+    {
+        var now = new DateTimeOffset(2020, 6, 15, 12, 0, 0, TimeSpan.Zero);
+        await using var factory = new HestiaApiFactory(DurableWithoutSender, services =>
+        {
+            services.RemoveAll<TimeProvider>();
+            services.AddSingleton<TimeProvider>(new FixedClock(now));
+        });
+
+        await factory.CreateClient().PostAsJsonAsync(Items, new CreateSampleItemRequest("Kettle"));
+
+        var row = Assert.Single(await OutboxAsync(factory));
+        Assert.Equal((now, now), (row.RaisedAt, row.NextAttemptAt));
+    }
+
+    private sealed class FixedClock(DateTimeOffset now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
     }
 
     [Fact]

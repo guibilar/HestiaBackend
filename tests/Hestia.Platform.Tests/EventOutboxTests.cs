@@ -82,6 +82,43 @@ public class EventOutboxTests
         Assert.True(await signal.WaitAsync(TimeSpan.Zero));
     }
 
+    [Theory]
+    [InlineData(2020)]
+    [InlineData(2040)]
+    public async Task DurableModule_WritesTheTimesOfARow_WithTheHostClock(int year)
+    {
+        // T70: the outbox sender compares NextAttemptAt with the host clock, so the save must use the same clock.
+        var now = new DateTimeOffset(year, 3, 4, 5, 6, 7, TimeSpan.Zero);
+        await using var services = Services<OutboxDbContext>(durable: true, new FixedClock(now));
+        await using (var scope = services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<OutboxDbContext>();
+            db.RaiseEvent(new ThingAdded(Guid.CreateVersion7(), "Kettle"));
+            await db.SaveChangesAsync();
+        }
+
+        await using var read = services.CreateAsyncScope();
+        var row = Assert.Single(read.ServiceProvider.GetRequiredService<OutboxDbContext>().Set<OutboxMessage>());
+        Assert.Equal((now, now), (row.RaisedAt, row.NextAttemptAt));
+    }
+
+    [Fact]
+    public async Task DurableModule_WithoutAHostClock_UsesTheRealClock()
+    {
+        await using var services = Services<OutboxDbContext>(durable: true);
+        var before = DateTimeOffset.UtcNow;
+        await using (var scope = services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<OutboxDbContext>();
+            db.RaiseEvent(new ThingAdded(Guid.CreateVersion7(), "Kettle"));
+            await db.SaveChangesAsync();
+        }
+
+        await using var read = services.CreateAsyncScope();
+        var row = Assert.Single(read.ServiceProvider.GetRequiredService<OutboxDbContext>().Set<OutboxMessage>());
+        Assert.InRange(row.RaisedAt, before, DateTimeOffset.UtcNow);
+    }
+
     [Fact]
     public async Task InMemoryModule_PublishesAfterTheSave_AndStoresNoRow()
     {
@@ -164,16 +201,25 @@ public class EventOutboxTests
         Assert.False(await signal.WaitAsync(TimeSpan.Zero));
     }
 
-    private ServiceProvider Services<TContext>(bool durable) where TContext : ModuleDbContext
+    private ServiceProvider Services<TContext>(bool durable, TimeProvider? clock = null) where TContext : ModuleDbContext
     {
         var services = new ServiceCollection();
         services.AddLogging();
+        if (clock is not null)
+        {
+            services.AddSingleton(clock);
+        }
         // Before AddModuleDbContext: the platform keeps these (TryAdd).
         services.AddSingleton<IDatabaseOptionsConfigurator>(new InMemoryDatabase(_database));
         services.AddSingleton<IEventPublisher>(_publisher);
         services.AddSingleton<IModuleEventSerializer, ThingSerializer>();
         services.AddModuleDbContext<TContext>("test", database => database.UseDurableEvents(durable));
         return services.BuildServiceProvider();
+    }
+
+    private sealed class FixedClock(DateTimeOffset now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
     }
 
     public sealed record ThingAdded(Guid ThingId, string Name);
