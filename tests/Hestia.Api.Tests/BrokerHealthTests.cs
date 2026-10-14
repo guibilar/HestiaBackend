@@ -14,6 +14,7 @@ namespace Hestia.Api.Tests;
 /// without a restart. A <see cref="BrokerGate"/> in front of the test broker plays a broker that is down, and one that
 /// comes back. The tests with a real broker need HESTIA_TEST_RABBITMQ (CI uses "container").
 /// </summary>
+[Collection(BrokerCollection.Name)]
 public class BrokerHealthTests
 {
     private const string Check = BrokerHealthCheck.Name;

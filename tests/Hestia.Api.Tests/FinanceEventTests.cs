@@ -14,6 +14,7 @@ namespace Hestia.Api.Tests;
 /// finance (the exchange <see cref="FinanceEventTopology.Exchange"/>), and the host's consumers receive the events.
 /// These tests need a broker: set HESTIA_TEST_RABBITMQ (CI uses "container").
 /// </summary>
+[Collection(BrokerCollection.Name)]
 public class FinanceEventTests
 {
     [Fact]
