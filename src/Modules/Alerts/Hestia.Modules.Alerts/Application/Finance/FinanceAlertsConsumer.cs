@@ -1,5 +1,6 @@
 using Hestia.Contracts.Finance;
 using Hestia.Modules.Alerts.Contracts;
+using Hestia.Platform.Events;
 
 namespace Hestia.Modules.Alerts.Application.Finance;
 
@@ -18,6 +19,8 @@ public sealed class FinanceAlertsConsumer(AlertsRunner runner)
     /// <summary>The inbox name of this consumer: "&lt;Module&gt;.&lt;Class&gt;". Do not change it later.</summary>
     public const string InboxName = "Alerts.FinanceAlertsConsumer";
 
+    private const string OnlyAsksForACheck = "It only asks for a check; a second check gives the same result.";
+
     public async Task Consume(BudgetLimitReached message, CancellationToken cancellationToken)
     {
         if (message.Percent >= BudgetLimitReached.LimitPercent)
@@ -30,11 +33,15 @@ public sealed class FinanceAlertsConsumer(AlertsRunner runner)
         _ = runner.RequestAsync(FinanceAlertSource.SourceName);
     }
 
+    [ChangesNoData(OnlyAsksForACheck)]
     public void Consume(TransactionsImported message) => _ = runner.RequestAsync(FinanceAlertSource.SourceName);
 
+    [ChangesNoData(OnlyAsksForACheck)]
     public void Consume(TransactionChanged message) => _ = runner.RequestAsync(FinanceAlertSource.SourceName);
 
+    [ChangesNoData(OnlyAsksForACheck)]
     public void Consume(BalanceRecorded message) => _ = runner.RequestAsync(FinanceAlertSource.SourceName);
 
+    [ChangesNoData(OnlyAsksForACheck)]
     public void Consume(SubscriptionPriceChanged message) => _ = runner.RequestAsync(FinanceAlertSource.SourceName);
 }

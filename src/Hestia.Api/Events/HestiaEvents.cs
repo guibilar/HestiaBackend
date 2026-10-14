@@ -6,8 +6,12 @@ using Hestia.Platform.Finance;
 using Hestia.Platform.Modules;
 using Hestia.Platform.Persistence;
 using JasperFx;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Options;
+using Npgsql;
 using Wolverine;
+using Wolverine.ErrorHandling;
 using Wolverine.RabbitMQ;
 
 namespace Hestia.Api.Events;
@@ -119,6 +123,8 @@ internal sealed class HestiaEventsSetup(
             wolverine.CodeGeneration.AlwaysUseServiceLocationFor(database.ContextType);
         }
 
+        ConsumerRetries.Apply(wolverine);
+
         // Always registered, and quiet unless LogAll is on: the setting can change without a restart, and the set of
         // consumers does not depend on it.
         foreach (var eventType in HestiaEvents.EventTypes(modules))
@@ -136,8 +142,9 @@ internal sealed class HestiaEventsSetup(
                     exchange.ExchangeType = ExchangeType.Fanout;
                     exchange.BindQueue(FinanceEventTopology.HostQueue);
                 });
-            // Inline: the broker removes a message only after its consumers finished. A consumer that fails
-            // gets the Wolverine retries; after them, the message goes to the dead-letter queue.
+            // Inline: the broker removes a message only after its consumers finished. A consumer that fails gets the
+            // retries of ConsumerRetries; after them, or at once for other errors, the message goes to the
+            // dead-letter queue of the broker (wolverine-dead-letter-queue).
             wolverine.ListenToRabbitQueue(FinanceEventTopology.HostQueue).ProcessInline();
 
             // The host is the gateway: a broker that is down when the host starts must not stop it. The host then
@@ -155,6 +162,44 @@ internal sealed class HestiaEventsSetup(
         }
         return uri;
     }
+}
+
+/// <summary>
+/// The retry policy for consumers (T52). Without a policy, Wolverine 6 tries a message once: the first failure moves it to
+/// the error queue (the RabbitMQ dead-letter queue, or nothing for a local queue, because the host has no Wolverine
+/// message storage).
+/// </summary>
+/// <remarks>
+/// <list type="bullet">
+/// <item>A short database failure gets <see cref="Delays"/>.Length more tries in the same delivery, after these
+/// delays: a failed save (<see cref="DbUpdateException"/>, also the inbox key of a duplicate delivery at the same time),
+/// a transient PostgreSQL error, or the end of the retries of the EF Core execution strategy.</item>
+/// <item>After the last try, and at once for all other errors (a bug does not go away with a retry), Wolverine moves the
+/// message to the error queue and logs an error ("was moved to the error queue"). RabbitMQ: the dead-letter queue of the
+/// broker. A local queue (module events): the message is dropped after the error log. The module outbox sender
+/// (<c>InvokeAsync</c>) gets the exception instead, and keeps the row for its own later try (T38).</item>
+/// <item>A retry runs all consumers of the event again (Wolverine combines them in one handler). So every consumer that
+/// changes data uses the inbox (T36).</item>
+/// </list>
+/// </remarks>
+public static class ConsumerRetries
+{
+    /// <summary>The waits before the second, third, and fourth try.</summary>
+    public static readonly TimeSpan[] Delays =
+        [TimeSpan.FromMilliseconds(100), TimeSpan.FromMilliseconds(500), TimeSpan.FromSeconds(2)];
+
+    /// <summary>True for an error that a later try can fix.</summary>
+    public static bool IsTransient(Exception exception) => exception switch
+    {
+        DbUpdateException or RetryLimitExceededException => true,
+        NpgsqlException npgsql => npgsql.IsTransient,
+        _ => false
+    };
+
+    internal static void Apply(WolverineOptions wolverine) =>
+        wolverine.Policies.OnException(IsTransient, "Transient database error (T52)")
+            .RetryWithCooldown(Delays)
+            .Then.MoveToErrorQueue();
 }
 
 /// <summary>Publishes module events to their in-process consumers (Wolverine local queues).</summary>
