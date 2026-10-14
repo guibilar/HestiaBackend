@@ -3,16 +3,20 @@ using Hestia.Contracts;
 using Hestia.Contracts.Finance;
 using Hestia.Platform.Events;
 using Hestia.Platform.Finance;
+using Hestia.Platform.Health;
 using Hestia.Platform.Modules;
 using Hestia.Platform.Persistence;
 using JasperFx;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
 using Npgsql;
 using Wolverine;
+using Wolverine.Configuration;
 using Wolverine.ErrorHandling;
 using Wolverine.RabbitMQ;
+using Wolverine.RabbitMQ.Internal;
 
 namespace Hestia.Api.Events;
 
@@ -35,6 +39,9 @@ public sealed class EventsOptions
 
     /// <summary>The module outbox sender: durable module events (T38).</summary>
     public OutboxOptions Outbox { get; set; } = new();
+
+    /// <summary>The connection to the broker: the start timeout and the reconnect (T37).</summary>
+    public BrokerOptions Broker { get; set; } = new();
 }
 
 /// <summary>
@@ -57,12 +64,23 @@ public static class HestiaEvents
                 $"{EventsOptions.SectionName}:Outbox:PollInterval and RetryDelay must be more than zero.")
             .Validate(options => options.Outbox.MaxAttempts >= 1,
                 $"{EventsOptions.SectionName}:Outbox:MaxAttempts must be 1 or more.")
+            .Validate(options => options.Outbox.WarnAfter > TimeSpan.Zero,
+                $"{EventsOptions.SectionName}:Outbox:WarnAfter must be more than zero.")
+            .Validate(options => options.Broker.StartTimeout >= TimeSpan.Zero && options.Broker.ReconnectInterval > TimeSpan.Zero,
+                $"{EventsOptions.SectionName}:Broker:StartTimeout must be zero or more, and ReconnectInterval more than zero.")
             .ValidateOnStart();
         // Before the modules register their DbContexts: the platform keeps these (TryAdd).
         builder.Services.AddScoped<IEventPublisher, WolverineEventPublisher>();
         // Durable module events (T38): the outbox format, and the sender that delivers the rows.
         builder.Services.AddSingleton<IModuleEventSerializer>(new ModuleEventSerializer(HestiaEvents.ModuleEventTypes(modules)));
         builder.Services.AddHostedService<ModuleOutboxSender>();
+        // T37: the event health in /health/ready (Degraded, so the apps still work), the reconnect to the broker, and
+        // the command that retries the stuck outbox rows.
+        builder.Services.AddHealthChecks()
+            .AddCheck<BrokerHealthCheck>(BrokerHealthCheck.Name, tags: [HealthTags.Ready])
+            .AddCheck<ModuleOutboxHealthCheck>(ModuleOutboxHealthCheck.Name, failureStatus: HealthStatus.Degraded, tags: [HealthTags.Ready]);
+        builder.Services.AddHostedService<BrokerReconnector>();
+        builder.Services.AddSingleton<IModuleCommand, RetryOutboxCommand>();
         // The setup reads the Events settings when the host starts (an extension from the container), so it sees the
         // final configuration, test settings included.
         builder.Services.AddSingleton<IWolverineExtension>(services =>
@@ -137,6 +155,9 @@ internal sealed class HestiaEventsSetup(
             // Declares the exchange, the queue, and the binding when they do not exist (idempotent).
             wolverine.UseRabbitMq(ParseRabbitMq(options.RabbitMq))
                 .AutoProvision()
+                // No request/reply over the broker. Its system queue is a listener, and a listener whose broker is down
+                // stops the start of the host (T37).
+                .DisableSystemRequestReplyQueueDeclaration()
                 .DeclareExchange(FinanceEventTopology.Exchange, exchange =>
                 {
                     exchange.ExchangeType = ExchangeType.Fanout;
@@ -145,11 +166,16 @@ internal sealed class HestiaEventsSetup(
             // Inline: the broker removes a message only after its consumers finished. A consumer that fails gets the
             // retries of ConsumerRetries; after them, or at once for other errors, the message goes to the
             // dead-letter queue of the broker (wolverine-dead-letter-queue).
-            wolverine.ListenToRabbitQueue(FinanceEventTopology.HostQueue).ProcessInline();
+            // T37: the queue is declared, but it is not a Wolverine listener: Wolverine starts listeners at the start of
+            // the host, and a broker that is down then stops the start. BrokerReconnector starts the listener as soon
+            // as the host has started, and again after a broker outage.
+            wolverine.Transports.GetOrCreate<RabbitMqTransport>().Queues[FinanceEventTopology.HostQueue].Mode = EndpointMode.Inline;
 
             // The host is the gateway: a broker that is down when the host starts must not stop it. The host then
-            // starts without the finance events and logs the error. Restart the host when the broker is back.
+            // starts without the finance events and logs the error. BrokerReconnector connects when the broker is
+            // back (T37). A short start timeout (Wolverine's default is 2 minutes), so the host answers requests soon.
             wolverine.ResourceMigrationFailureMode = ResourceMigrationFailureMode.ContinueOnFailures;
+            wolverine.BrokerInitializationTimeout = options.Broker.StartTimeout;
         }
     }
 
