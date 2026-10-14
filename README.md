@@ -522,6 +522,12 @@ dotnet format style --verify-no-changes --severity warn
 dotnet tool restore && sh scripts/check-migrations.sh       # after dotnet build
 ```
 
+The vulnerability check fails when a shipped package (direct or transitive) has an advisory of moderate severity
+or worse. Test-only packages do not block. In CI, the check writes its findings as annotations on the run (T55):
+
+- one error per vulnerable shipped package, with the name, the version, the severity, and the advisory link;
+- one notice per vulnerable test-only package.
+
 ### Test results as annotations
 
 The two CI test steps write TRX files (`--report-xunit-trx`, from xUnit v3, with no extra package).
