@@ -181,9 +181,10 @@ internal sealed class BrokerReconnector(
 
         while (!stoppingToken.IsCancellationRequested)
         {
+            var reached = true;
             try
             {
-                await CheckAsync(stoppingToken);
+                reached = await CheckAsync(stoppingToken);
             }
             catch (Exception) when (stoppingToken.IsCancellationRequested)
             {
@@ -197,7 +198,16 @@ internal sealed class BrokerReconnector(
 
             try
             {
-                await ReportAsync(stoppingToken);
+                if (reached)
+                {
+                    await ReportAsync(stoppingToken);
+                }
+                else
+                {
+                    // The connect failed just now: no probe is necessary (a probe here also changes what the
+                    // readiness check sees right after a failed connect).
+                    state.Report(connected: false);
+                }
             }
             catch (Exception) when (stoppingToken.IsCancellationRequested)
             {
@@ -220,12 +230,15 @@ internal sealed class BrokerReconnector(
         }
     }
 
-    /// <summary>One check: connect when the transport never connected, then start the listeners that need it.</summary>
-    internal async Task CheckAsync(CancellationToken cancellationToken)
+    /// <summary>
+    /// One check: connect when the transport never connected, then start the listeners that need it. False when the
+    /// transport never connected and the connect failed now.
+    /// </summary>
+    internal async Task<bool> CheckAsync(CancellationToken cancellationToken)
     {
         if (FinanceBroker.Transport(runtime, options.CurrentValue) is not { } transport)
         {
-            return;
+            return true;
         }
 
         if (!await FinanceBroker.ConnectedOnceAsync(transport, cancellationToken))
@@ -244,7 +257,7 @@ internal sealed class BrokerReconnector(
                         "events until it is back; it tries again every {Interval}", ex.GetBaseException().Message,
                         options.CurrentValue.Broker.ReconnectInterval);
                 }
-                return;
+                return false;
             }
             _reportedDown = false;
             _needsSetup = true;
@@ -264,6 +277,7 @@ internal sealed class BrokerReconnector(
             await runtime.Endpoints.StartListenerAsync(endpoint, cancellationToken);
             logger.LogInformation("Events: the host listens to the queue {Queue}", endpoint.EndpointName);
         }
+        return true;
     }
 
     /// <summary>Reports whether the host gets the finance events now (T80).</summary>
