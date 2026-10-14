@@ -302,13 +302,14 @@ module rules (IAlertSource) ──check──> alert store (raise, update, resol
 ```
 
 - **Sources.** Each module adds its rules as an `IAlertSource` (`Hestia.Modules.Alerts.Contracts`). A check returns the
-  alerts that hold now, and the key prefixes that it looked at completely (`Covered`). Two sources now:
+  alerts that hold now, and the key prefixes that it looked at completely (`Covered`). Four sources now:
   - `Money.Finance`, in this module, because finance is a separate service. It reads four finance reports as the
     **system identity**, read-only (`AsSystem("Alerts.FinanceAlertSource")`, T42): budgets over their limit, no
     statement import for more than 7 days, accounts whose statements stop before last month, price changes of the last
     45 days, and transactions that no rule sorts. The rules are the same as the web dashboard (`attention.ts`) and the
     Android app (`core/logic/Attention.kt`). They were in the Today module until T15.
-  - `Documents.Expiry`, in the Documents module (see [Documents](#documents)).
+  - `Documents.Expiry` and `Documents.Files`, in the Documents module (see [Documents](#documents)).
+  - `System.Health`, in the host (`Hestia.Api/Events/SystemHealthAlerts.cs`, T80; see [System alerts](#system-alerts-t80)).
 - **The store.** One row per alert. The key is the Today card id (for example `money.budget-over.<budget id>`), so the
   same condition has one open alert. A check that finds a new key raises an alert; a known key with a new text, value,
   or severity is updated (`updatedAt`); an open key that the check covers but did not find is resolved (`resolvedAt`).
@@ -405,6 +406,7 @@ for each link first. Other modules read more with `IDocumentQueries` (`FindAsync
 items. The rules are an alert source in this module (`DocumentExpiryAlerts`). After `DocumentAdded`, `DocumentChanged`
 (details), and `DocumentDeleted`, the consumer `DocumentAlertsConsumer` checks that one document. The timer of the
 Alerts module checks all documents (a document starts to expire because time passes).
+A second source (`DocumentFileAlerts`, T80) gives `documents.files-missing` from the weekly file check (see below).
 
 | Setting (`Documents` section) | Default | Description |
 | --- | --- | --- |
@@ -460,6 +462,14 @@ the start, and then every 7 days. It deletes nothing. It logs a warning:
 - for each row whose file is missing, with the document id and the file id.
 
 A clean volume gives one information line. To see the results: `docker compose logs hestia-api | grep "Documents:"`.
+
+**Alert: missing files (T80).** When the last weekly check found rows whose file is missing, Today shows the alert
+`documents.files-missing` (severity Bad) in "Needs attention", with the count, the day of the check, and the command
+that lists the rows (`--check-missing`). The alert uses the stored result of the check: it does not read the volume
+again. At each alert check (every 15 minutes), it looks again at only those rows and files, so the alert goes when you
+restore the files or delete the documents. A new missing file shows after the next weekly check. The result is in
+memory: after a restart, the open alert stays as it is until the first check (`FileCheck:FirstDelay`). The command
+`documents-clean-files` runs in its own process, so its result does not change the alert.
 
 The host can run at the same time. Make a backup first if you are not sure (`docker compose exec backup backup.sh once`).
 
@@ -636,6 +646,7 @@ Settings (section `Events`):
 | `Outbox:WarnAfter` | `00:10:00` | The readiness check `events-outbox` is Degraded when an outbox row is older than this (T37). |
 | `Broker:StartTimeout` | `00:00:05` | How long the start waits for the broker. Then the host starts without it, and connects later (T37). |
 | `Broker:ReconnectInterval` | `00:00:15` | How often the host tries the broker again, and starts a listener that does not run (T37). |
+| `Broker:AlertAfter` | `00:30:00` | After this time without a broker connection, Today shows the alert `system.broker-down` (T80). |
 
 The broker runs in the finance project (its `events` profile), on the network `finance`. Until a module consumes a
 finance event, the host takes it from the queue and drops it (or logs it, with `LogAll`).
@@ -669,6 +680,22 @@ docker compose run --rm -T hestia-api retry-outbox all         # every module wi
 ```
 
 It prints the count for each schema, for example `documents: 2 row(s) reset`. The exit code is 1 for an unknown schema.
+
+### System alerts (T80)
+
+The host also shows these problems on Today, in "Needs attention", so you do not have to read the log. They are the
+alerts of the module `System` (alert source `System.Health`, place 900: after the modules of the user):
+
+| Alert key | Severity | When | It goes when |
+| --- | --- | --- | --- |
+| `system.outbox-stuck.<schema>` | Bad | The outbox of a module has rows that failed `Outbox:MaxAttempts` times. The text has the count and the `retry-outbox <schema>` command. | No row of that outbox is at `Outbox:MaxAttempts` (for example after `retry-outbox`). |
+| `system.broker-down` | Warning | The host has had no working connection to the broker for more than `Broker:AlertAfter` (30 minutes). The text has the day when the outage started. | The connection is back. |
+
+- The reconnector reports the state of the connection after each of its checks (every `Broker:ReconnectInterval`).
+  The time of the outage is in memory. After a restart of the host, the 30 minutes start again; an open alert stays
+  until the connection is back.
+- An outbox row that is only old (`Outbox:WarnAfter`) gives no alert: the readiness check `events-outbox` reports it.
+- The alerts have no link. The clients show them with a generic icon.
 
 ### The contracts package
 

@@ -1,6 +1,7 @@
 using System.Reflection;
 using Hestia.Contracts;
 using Hestia.Contracts.Finance;
+using Hestia.Modules.Alerts.Contracts;
 using Hestia.Platform.Events;
 using Hestia.Platform.Finance;
 using Hestia.Platform.Health;
@@ -66,8 +67,9 @@ public static class HestiaEvents
                 $"{EventsOptions.SectionName}:Outbox:MaxAttempts must be 1 or more.")
             .Validate(options => options.Outbox.WarnAfter > TimeSpan.Zero,
                 $"{EventsOptions.SectionName}:Outbox:WarnAfter must be more than zero.")
-            .Validate(options => options.Broker.StartTimeout >= TimeSpan.Zero && options.Broker.ReconnectInterval > TimeSpan.Zero,
-                $"{EventsOptions.SectionName}:Broker:StartTimeout must be zero or more, and ReconnectInterval more than zero.")
+            .Validate(options => options.Broker.StartTimeout >= TimeSpan.Zero && options.Broker.ReconnectInterval > TimeSpan.Zero &&
+                    options.Broker.AlertAfter > TimeSpan.Zero,
+                $"{EventsOptions.SectionName}:Broker:StartTimeout must be zero or more, and ReconnectInterval and AlertAfter more than zero.")
             .ValidateOnStart();
         // Before the modules register their DbContexts: the platform keeps these (TryAdd).
         builder.Services.AddScoped<IEventPublisher, WolverineEventPublisher>();
@@ -81,6 +83,9 @@ public static class HestiaEvents
             .AddCheck<ModuleOutboxHealthCheck>(ModuleOutboxHealthCheck.Name, failureStatus: HealthStatus.Degraded, tags: [HealthTags.Ready]);
         builder.Services.AddHostedService<BrokerReconnector>();
         builder.Services.AddSingleton<IModuleCommand, RetryOutboxCommand>();
+        // T80: the same problems as alerts on Today ("Needs attention", module System).
+        builder.Services.AddSingleton<BrokerConnectionState>();
+        builder.Services.AddScoped<IAlertSource, SystemHealthAlerts>();
         // The setup reads the Events settings when the host starts (an extension from the container), so it sees the
         // final configuration, test settings included.
         builder.Services.AddSingleton<IWolverineExtension>(services =>
