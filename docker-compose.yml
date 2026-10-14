@@ -26,6 +26,8 @@ services:
       FinanceProxy__Address: ${FINANCE_API_URL:-http://personal-finance-api:8080}
       # T08: which day it is for Today. Use the same zone as finance (its Reports:TimeZone), so "this month" matches.
       Today__TimeZone: ${TZ:-America/Toronto}
+      # T15: the same zone for the alert rules (for example "no statement imported for more than 7 days").
+      Alerts__TimeZone: ${TZ:-America/Toronto}
       # T04: the RabbitMQ broker of the finance project (on "finance"), for the finance events. Empty: no finance events.
       Events__RabbitMq: ${EVENTS_RABBITMQ_URL:-}
       # T04: a debug consumer logs every event. For a check, not for every day.

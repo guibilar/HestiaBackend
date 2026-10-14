@@ -4,32 +4,18 @@ using Hestia.Modules.Today.Contracts;
 namespace Hestia.Modules.Today.Tests;
 
 /// <summary>
-/// The finance card rules, case by case. The cases come from the web dashboard tests (dashboard-stats.spec.ts,
-/// attention.spec.ts) and the Android AttentionTest, so the three places give the same answer.
+/// The finance tile rules, case by case. The cases come from the web dashboard tests (dashboard-stats.spec.ts), so the
+/// places give the same answer. The attention rules are in the Alerts module now (T15): see FinanceAlertRulesTests.
 /// </summary>
 public sealed class FinanceCardsTests
 {
     private static readonly DateOnly September5 = new(2026, 9, 5);
-    private static readonly TimeZoneInfo Toronto = TimeZoneInfo.FindSystemTimeZoneById("America/Toronto");
-
-    private static Account NewAccount(string name, string format = "Cibc", string? last = null, string? balanceDate = null,
-        string? importedAt = null) =>
-        new(Guid.NewGuid(), name, format,
-            last is null ? null : Utc(last),
-            importedAt is null ? null : Utc(importedAt),
-            balanceDate is null ? null : new AccountBalance(Utc(balanceDate), 100m));
-
-    private static DateTime Utc(string value) => DateTime.Parse(value, null, System.Globalization.DateTimeStyles.AdjustToUniversal);
 
     private static CategorizedReport Month(decimal total, decimal? previousToDate = null) =>
         new() { MonthlyData = [new MonthTotal("Sep 2026", total)], PreviousMonthToDateTotal = previousToDate };
 
     private static CategorizedReport Year(decimal average, bool runningMonthOnly = false) =>
         new() { AverageMonthlyTotal = average, AverageIncludesCurrentMonth = runningMonthOnly };
-
-    private static FinanceCards.Inputs Inputs(BudgetPage? budgets = null, UncategorisedReport? unsorted = null,
-        RecurringReport? recurring = null, IReadOnlyList<Account>? accounts = null) =>
-        new(null, null, null, null, budgets, unsorted, recurring, accounts);
 
     [Theory]
     [InlineData(2026, 9, 5, "Aug 1–5")]
@@ -155,92 +141,5 @@ public sealed class FinanceCardsTests
 
         var fine = FinanceCards.BudgetsTile(new BudgetPage { Items = [new Budget(Guid.NewGuid(), "A", 10m)] });
         Assert.Equal(("All within limits", TodaySeverity.Good), (fine.Text, fine.Severity));
-    }
-
-    [Fact]
-    public void AccountsBehind_StopBeforeLastMonth_ByTransactionsOrBalances()
-    {
-        var accounts = new[]
-        {
-            NewAccount("TFSA", "Wealthsimple", "2026-06-16T00:00:00Z", "2026-06-30T00:00:00Z"),
-            // A quiet month still brings a balance for its last day.
-            NewAccount("RRSP", "Wealthsimple", "2026-03-02T00:00:00Z", "2026-08-31T00:00:00Z"),
-            NewAccount("Chequing", "Cibc", "2026-09-02T00:00:00Z"),
-            NewAccount("Cash", "Manual", "2026-01-02T00:00:00Z"),
-            NewAccount("Unused")
-        };
-
-        Assert.Equal(new[] { "TFSA" }, FinanceCards.AccountsBehind(accounts, September5).Select(a => a.Name));
-        Assert.Equal(new DateOnly(2026, 6, 30), FinanceCards.StatementsReach(accounts[0]));
-    }
-
-    [Fact]
-    public void Attention_ListsBudgetsOver_StatementsBehind_RecentPriceChanges_AndUnsorted()
-    {
-        RecurringPayment Payment(string name, string since, string status = "Active") =>
-            new(name, status, new PriceChange(16.49m, 18.99m, Utc(since)));
-
-        var items = FinanceCards.AttentionItems(
-            Inputs(
-                budgets: new BudgetPage { Items = [new Budget(Guid.NewGuid(), "Groceries", 120m)] },
-                unsorted: new UncategorisedReport(1),
-                recurring: new RecurringReport
-                {
-                    Payments =
-                    [
-                        Payment("NETFLIX", "2026-08-20T00:00:00Z"),
-                        Payment("OLD GYM", "2026-03-20T00:00:00Z"),
-                        Payment("STOPPED", "2026-08-25T00:00:00Z", "Stopped")
-                    ]
-                },
-                accounts: [NewAccount("TFSA", "Wealthsimple", balanceDate: "2026-06-30T00:00:00Z")]),
-            September5, Toronto).ToList();
-
-        Assert.Equal(
-            new[]
-            {
-                ("budget-over", "{budget} is over its limit ({used} used)"),
-                ("statements-behind", "{account}: statements reach {reach}. Import last month's"),
-                ("price-changed", "{payment} went up from {from} to {to}"),
-                ("unsorted", "{count} transaction is in Other because no rule names its merchant")
-            },
-            items.Select(item => (item.Kind, item.Text!)));
-        Assert.All(items, item => Assert.Equal(TodayCardType.Attention, item.Type));
-        Assert.Equal(TodayValue.Percent(120m), items[0].Values["used"]);
-        Assert.Equal(TodaySeverity.Bad, items[0].Severity);
-        Assert.Equal(TodayValue.Day(new DateOnly(2026, 6, 30)), items[1].Values["reach"]);
-        Assert.Equal(FinanceCards.TransactionsImportLink, items[1].Link);
-    }
-
-    [Fact]
-    public void Attention_SaysWhenNothingWasImportedForMoreThanAWeek()
-    {
-        var accounts = new[] { NewAccount("Chequing", "Cibc", "2026-08-26T00:00:00Z", importedAt: "2026-08-27T15:00:00Z") };
-
-        var items = FinanceCards.AttentionItems(Inputs(accounts: accounts), September5, Toronto).ToList();
-
-        var item = Assert.Single(items);
-        Assert.Equal("No statements imported in {days} days", item.Text);
-        Assert.Equal(TodayValue.Count(9), item.Values["days"]);
-        Assert.Equal("/money/transactions#import", item.Link);
-        Assert.Empty(FinanceCards.AttentionItems(Inputs(accounts: accounts), new DateOnly(2026, 9, 3), Toronto));
-    }
-
-    [Fact]
-    public void LastImportDay_IsTheLocalDay_OfTheImport()
-    {
-        // 01:30 UTC on August 28th is still August 27th in Toronto.
-        var accounts = new[] { NewAccount("Chequing", importedAt: "2026-08-28T01:30:00Z") };
-
-        Assert.Equal(new DateOnly(2026, 8, 27), FinanceCards.LastImportDay(accounts, Toronto));
-    }
-
-    [Fact]
-    public void Attention_ManyUnsorted_UsesThePlural_AndNothingIsAnEmptyList()
-    {
-        var item = Assert.Single(FinanceCards.AttentionItems(Inputs(unsorted: new UncategorisedReport(3)), September5, Toronto));
-        Assert.Equal("{count} transactions are in Other because no rule names their merchants", item.Text);
-
-        Assert.Empty(FinanceCards.AttentionItems(Inputs(), September5, Toronto));
     }
 }

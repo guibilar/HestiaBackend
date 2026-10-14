@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Internal: the Today endpoint and the finance cards. Only the host references this project.
+  <!-- Internal: the Today endpoint and the finance tiles. Only the host references this project.
        Other modules use Hestia.Modules.Today.Contracts (ITodayCardProvider). -->
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
@@ -9,6 +9,8 @@
   <ItemGroup>
     <ProjectReference Include="..\..\..\Hestia.Platform\Hestia.Platform.csproj" />
     <ProjectReference Include="..\Hestia.Modules.Today.Contracts\Hestia.Modules.Today.Contracts.csproj" />
+    <!-- The "Needs attention" items of all modules come from the Alerts module (IAlertQueries, T15). -->
+    <ProjectReference Include="..\..\Alerts\Hestia.Modules.Alerts.Contracts\Hestia.Modules.Alerts.Contracts.csproj" />
   </ItemGroup>
 
 </Project>

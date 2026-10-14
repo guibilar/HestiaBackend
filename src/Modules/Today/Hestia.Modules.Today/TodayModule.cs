@@ -10,8 +10,9 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Hestia.Modules.Today;
 
 /// <summary>
-/// The Today module (T08): one endpoint with all cards of the Today screen. Each module gives its cards through
-/// <see cref="ITodayCardProvider"/>. This module has no data of its own, so it has no DbContext and no schema.
+/// The Today module (T08): one endpoint with all cards of the Today screen. Each module gives its tiles through
+/// <see cref="ITodayCardProvider"/>; the "Needs attention" items of all modules come from the Alerts module (T15).
+/// This module has no data of its own, so it has no DbContext and no schema.
 /// </summary>
 public sealed class TodayModule : IModule
 {

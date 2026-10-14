@@ -1,14 +1,13 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
-using Hestia.Testing;
 using Microsoft.AspNetCore.Http;
 
-namespace Hestia.Modules.Today.Tests;
+namespace Hestia.Testing;
 
 /// <summary>
-/// The finance answers for the Today tests, served by <see cref="FakeFinance"/>: one JSON body per finance path, in
-/// the shapes of Finance.Contracts. The day of the data is <see cref="Today"/> (September 5th, 2026, America/Toronto),
-/// the same as in the web dashboard tests (attention.spec.ts).
+/// The finance answers for the Today and Alerts tests, served by <see cref="FakeFinance"/>: one JSON body per finance
+/// path, in the shapes of Finance.Contracts. The day of the data is <see cref="Today"/> (September 5th, 2026,
+/// America/Toronto), the same as in the web dashboard tests (attention.spec.ts).
 /// </summary>
 public sealed class FinanceData
 {
@@ -121,13 +120,13 @@ public sealed class FinanceData
     /// <summary>Paths that answer with this status code and no body.</summary>
     public ConcurrentDictionary<string, int> Failures { get; } = new(StringComparer.Ordinal);
 
-    private static object BudgetJson(Guid id, string name, decimal amount, decimal spent, decimal used) => new
+    public static object BudgetJson(Guid id, string name, decimal amount, decimal spent, decimal used) => new
     {
         id, name, description = "", status = "Active", period = "Monthly", categories = Array.Empty<object>(),
         totalAmount = amount, totalSpent = spent, totalRemaining = amount - spent, percentageUsed = used
     };
 
-    private static object PaymentJson(string name, string since, string status = "Active") => new
+    public static object PaymentJson(string name, string since, string status = "Active") => new
     {
         name, cadence = "Monthly", status, amount = 18.99m, variableAmount = false, firstDate = "2025-01-20T00:00:00Z",
         lastDate = since, lastAmount = 18.99m, nextDate = "2026-09-20T00:00:00Z", count = 20, monthlyCost = 18.99m,
@@ -158,16 +157,36 @@ public sealed class FinanceData
         await context.Response.WriteAsync(JsonSerializer.Serialize(answer, Json));
     }
 
-    /// <summary>The finance paths that Today reads.</summary>
-    public static readonly string[] Paths =
+    /// <summary>The finance paths that the Today tiles read, as the signed-in user.</summary>
+    public static readonly string[] TilePaths =
     [
         "GET /api/Reports/current-month-categorized-graph",
         "GET /api/Reports/monthly-categorized-graph",
         "GET /api/Reports/cash-flow",
         "GET /api/Reports/net-worth",
+        "POST /api/Budget/Filter"
+    ];
+
+    /// <summary>The finance paths that the finance alert rules read, as the system identity (T15).</summary>
+    public static readonly string[] AlertPaths =
+    [
         "POST /api/Budget/Filter",
         "GET /api/Reports/uncategorised",
         "GET /api/Reports/recurring",
         "GET /api/Accounts"
     ];
+
+    /// <summary>All finance paths of the Today screen: the tiles and the alerts.</summary>
+    public static readonly string[] Paths = TilePaths.Union(AlertPaths).ToArray();
+
+    /// <summary>The subject of the system identity in the gateway token (T42).</summary>
+    public const string SystemSubject = "hestia-system";
+
+    /// <summary>The finance requests of background code (the system identity, T42), for example the alert checks.</summary>
+    public static IReadOnlyList<FinanceRequest> SystemRequests(FakeFinance finance) =>
+        finance.Requests.Where(request => GatewayToken.SubjectOf(request) == SystemSubject).ToList();
+
+    /// <summary>The finance requests of signed-in users.</summary>
+    public static IReadOnlyList<FinanceRequest> UserRequests(FakeFinance finance) =>
+        finance.Requests.Where(request => GatewayToken.SubjectOf(request) != SystemSubject).ToList();
 }

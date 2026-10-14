@@ -73,12 +73,12 @@ public sealed class OcrOptions
     public TimeSpan PollInterval { get; set; } = TimeSpan.FromMinutes(1);
 }
 
-/// <summary>The expiry cards on Today (section <c>Documents:Expiry</c>).</summary>
+/// <summary>The expiry alerts, on Today and in <c>GET /api/alerts</c> (section <c>Documents:Expiry</c>).</summary>
 public sealed class ExpiryOptions
 {
-    /// <summary>A document that expires in this many days, or fewer, shows on Today.</summary>
+    /// <summary>A document that expires in this many days, or fewer, has an alert.</summary>
     public int SoonDays { get; set; } = 30;
 
-    /// <summary>A document that expired this many days ago, or fewer, still shows on Today.</summary>
+    /// <summary>A document that expired this many days ago, or fewer, still has an alert.</summary>
     public int ExpiredDays { get; set; } = 7;
 }

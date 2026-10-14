@@ -3,9 +3,11 @@ using System.Security.Claims;
 namespace Hestia.Modules.Today.Contracts;
 
 /// <summary>
-/// The cards of one module on Today. A module that shows cards implements it, and registers it in its
-/// <c>AddServices</c> as a scoped service: <c>services.AddScoped&lt;ITodayCardProvider, DocumentsTodayCards&gt;()</c>.
+/// The cards of one module on Today. A module that shows tiles implements it, and registers it in its
+/// <c>AddServices</c> as a scoped service: <c>services.AddScoped&lt;ITodayCardProvider, TasksTodayCards&gt;()</c>.
 /// The Today module calls all providers in parallel for each <c>GET /api/today</c>, inside the HTTP request of the user.
+/// <para>For "Needs attention" items, use an alert source (<c>IAlertSource</c> in <c>Hestia.Modules.Alerts.Contracts</c>,
+/// T15) instead: Today shows the alerts of each module, and the clients can poll them (<c>GET /api/alerts</c>).</para>
 /// </summary>
 /// <remarks>
 /// A provider that throws, or does not answer in time (<c>Today:ProviderTimeout</c>), gives no cards; the other

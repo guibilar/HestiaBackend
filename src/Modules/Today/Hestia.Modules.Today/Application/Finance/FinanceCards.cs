@@ -4,9 +4,10 @@ using Hestia.Modules.Today.Contracts;
 namespace Hestia.Modules.Today.Application.Finance;
 
 /// <summary>
-/// The finance cards of Today, from the finance reports: the four headline tiles and the "Needs attention" items.
-/// The rules are the same as the web dashboard (<c>FinanceTilesComponent</c>, <c>dashboard-stats.ts</c>,
-/// <c>attention.ts</c>) and the Android app (<c>core/logic/Attention.kt</c>). A report that did not load is null.
+/// The four finance tiles of Today, from the finance reports. The rules are the same as the web dashboard
+/// (<c>FinanceTilesComponent</c>, <c>dashboard-stats.ts</c>). A report that did not load is null.
+/// The finance "Needs attention" items are alerts now (T15): the Alerts module has their rules, and Today reads them
+/// through <c>IAlertQueries</c>.
 /// </summary>
 public static class FinanceCards
 {
@@ -15,38 +16,24 @@ public static class FinanceCards
     /// <summary>The text of a tile whose report did not load.</summary>
     public const string NotLoaded = "Could not load this";
 
-    /// <summary>More days than this without a statement import is worth a mention.</summary>
-    public const int ImportReminderDays = 7;
-
-    /// <summary>Price changes this recent are worth a mention.</summary>
-    public const int PriceChangeDays = 45;
-
     public const string BudgetsLink = "/money/budgets";
     public const string NetWorthLink = "/money/net-worth";
-    /// <summary>The Transactions page with the statement import open (T57).</summary>
-    public const string TransactionsImportLink = "/money/transactions#import";
-    public const string SubscriptionsLink = "/money/subscriptions";
-    public const string UnsortedLink = "/money/rules#unsorted";
 
-    /// <summary>Everything that the finance cards read. Null: that report did not load.</summary>
+    /// <summary>Everything that the finance tiles read. Null: that report did not load.</summary>
     public sealed record Inputs(
         CategorizedReport? Month,
         CategorizedReport? Year,
         CashFlowReport? CashFlow,
         NetWorthReport? NetWorth,
-        BudgetPage? Budgets,
-        UncategorisedReport? Uncategorised,
-        RecurringReport? Recurring,
-        IReadOnlyList<Account>? Accounts);
+        BudgetPage? Budgets);
 
-    /// <summary>The tiles, then the attention items.</summary>
-    public static IReadOnlyList<TodayCard> Make(Inputs inputs, DateOnly today, TimeZoneInfo timeZone) =>
+    /// <summary>The four tiles.</summary>
+    public static IReadOnlyList<TodayCard> Make(Inputs inputs, DateOnly today) =>
     [
         SpentTile(inputs.Month, inputs.Year, today),
         LeftOverTile(inputs.CashFlow, today),
         NetWorthTile(inputs.NetWorth),
-        BudgetsTile(inputs.Budgets),
-        .. AttentionItems(inputs, today, timeZone)
+        BudgetsTile(inputs.Budgets)
     ];
 
     // ---- Tiles ----------------------------------------------------------------------------------------------------
@@ -206,143 +193,10 @@ public static class FinanceCards
 
     private static bool IsOver(Budget budget) => budget.PercentageUsed >= 100;
 
-    // ---- Needs attention ------------------------------------------------------------------------------------------
-
-    /// <summary>
-    /// What needs a look, most pressing first; empty when all is well. A report that did not load adds nothing.
-    /// </summary>
-    public static IEnumerable<TodayCard> AttentionItems(Inputs inputs, DateOnly today, TimeZoneInfo timeZone)
-    {
-        foreach (var budget in (inputs.Budgets?.Items ?? new List<Budget>()).Where(IsOver))
-        {
-            yield return Attention($"budget-over.{budget.Id}", "budget-over", "Budget over its limit",
-                "{budget} is over its limit ({used} used)",
-                new Dictionary<string, TodayValue>
-                {
-                    ["budget"] = TodayValue.Plain(budget.Name),
-                    ["used"] = TodayValue.Percent(Math.Round(budget.PercentageUsed, MidpointRounding.AwayFromZero))
-                },
-                TodaySeverity.Bad, BudgetsLink);
-        }
-
-        var accounts = inputs.Accounts ?? Array.Empty<Account>();
-        if (LastImportDay(accounts, timeZone) is { } last)
-        {
-            var days = today.DayNumber - last.DayNumber;
-            if (days > ImportReminderDays)
-            {
-                yield return Attention("statements-not-imported", "statements-not-imported", "No recent import",
-                    "No statements imported in {days} days",
-                    new Dictionary<string, TodayValue> { ["days"] = TodayValue.Count(days) },
-                    TodaySeverity.Warning, TransactionsImportLink);
-            }
-        }
-
-        foreach (var account in AccountsBehind(accounts, today))
-        {
-            yield return Attention($"statements-behind.{account.Id}", "statements-behind", "Statement to import",
-                "{account}: statements reach {reach}. Import last month's",
-                new Dictionary<string, TodayValue>
-                {
-                    ["account"] = TodayValue.Plain(account.Name),
-                    ["reach"] = TodayValue.Day(StatementsReach(account)!.Value)
-                },
-                TodaySeverity.Warning, TransactionsImportLink);
-        }
-
-        foreach (var payment in inputs.Recurring?.Payments ?? new List<RecurringPayment>())
-        {
-            if (payment.PriceChange is not { } change || payment.Status == "Stopped" ||
-                today.DayNumber - Day(change.Since).DayNumber > PriceChangeDays)
-            {
-                continue;
-            }
-            yield return Attention($"price-changed.{payment.Name}", "price-changed", "Price change",
-                change.To > change.From ? "{payment} went up from {from} to {to}" : "{payment} went down from {from} to {to}",
-                new Dictionary<string, TodayValue>
-                {
-                    ["payment"] = TodayValue.Plain(payment.Name),
-                    ["from"] = TodayValue.Money(change.From),
-                    ["to"] = TodayValue.Money(change.To)
-                },
-                TodaySeverity.Warning, SubscriptionsLink);
-        }
-
-        if (inputs.Uncategorised is { TransactionCount: > 0 and var unsorted })
-        {
-            yield return Attention("unsorted", "unsorted", "Unsorted transactions",
-                unsorted == 1
-                    ? "{count} transaction is in Other because no rule names its merchant"
-                    : "{count} transactions are in Other because no rule names their merchants",
-                new Dictionary<string, TodayValue> { ["count"] = TodayValue.Count(unsorted) },
-                TodaySeverity.Warning, UnsortedLink);
-        }
-    }
-
-    /// <summary>
-    /// The day an account's imported statements reach: its latest transaction or its latest balance (Wealthsimple
-    /// statements record one for their last day, even in a month without activity). Null when it has neither.
-    /// </summary>
-    public static DateOnly? StatementsReach(Account account)
-    {
-        DateOnly?[] days = [account.LastTransactionDate is { } t ? Day(t) : null, account.Balance is { } b ? Day(b.Date) : null];
-        return days.Max();
-    }
-
-    /// <summary>
-    /// Accounts whose statements stop before last month began: last month's statement is out and not imported yet.
-    /// Accounts added by hand, and ones that nothing was ever imported into, are left alone.
-    /// </summary>
-    public static IEnumerable<Account> AccountsBehind(IEnumerable<Account> accounts, DateOnly today)
-    {
-        var lastMonthStart = new DateOnly(today.Year, today.Month, 1).AddMonths(-1);
-        return accounts.Where(account => !IsManual(account) && StatementsReach(account) < lastMonthStart);
-    }
-
-    /// <summary>
-    /// The local day that statements were last imported: the latest import into an account that takes statements or,
-    /// for accounts imported into before imports were recorded, the latest transaction's day. Null when never.
-    /// </summary>
-    public static DateOnly? LastImportDay(IEnumerable<Account> accounts, TimeZoneInfo timeZone)
-    {
-        var importable = accounts.Where(account => !IsManual(account)).ToList();
-        var imported = importable
-            .Where(account => account.LastImportedAt is not null)
-            .Select(account => LocalDay(account.LastImportedAt!.Value, timeZone))
-            .ToList();
-        if (imported.Count > 0)
-        {
-            return imported.Max();
-        }
-        // Transaction dates are calendar days at midnight UTC: the same day here.
-        var transactions = importable
-            .Where(account => account.LastTransactionDate is not null)
-            .Select(account => Day(account.LastTransactionDate!.Value))
-            .ToList();
-        return transactions.Count > 0 ? transactions.Max() : null;
-    }
-
-    private static bool IsManual(Account account) => string.Equals(account.Format, "Manual", StringComparison.OrdinalIgnoreCase);
-
     // ---- Helpers --------------------------------------------------------------------------------------------------
 
     /// <summary>"Oct 2026": how the finance reports label the month of a day.</summary>
     public static string MonthLabel(DateOnly day) => day.ToString("MMM yyyy", CultureInfo.InvariantCulture);
-
-    /// <summary>A finance calendar day (midnight UTC) as a date.</summary>
-    public static DateOnly Day(DateTime value) => DateOnly.FromDateTime(value.Kind == DateTimeKind.Local ? value.ToUniversalTime() : value);
-
-    /// <summary>A finance moment (UTC) as a day in <paramref name="timeZone"/>.</summary>
-    public static DateOnly LocalDay(DateTime value, TimeZoneInfo timeZone)
-    {
-        var utc = value.Kind switch
-        {
-            DateTimeKind.Local => value.ToUniversalTime(),
-            DateTimeKind.Unspecified => DateTime.SpecifyKind(value, DateTimeKind.Utc),
-            _ => value
-        };
-        return DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(utc, timeZone));
-    }
 
     /// <summary>The text under a tile's value, with its look.</summary>
     private sealed record Hint(
@@ -359,8 +213,4 @@ public static class FinanceCards
 
     private static TodayCard Unavailable(string id, string kind, string title, string? link) =>
         new($"money.{id}", Module, TodayCardType.Tile, kind, title, null, NotLoaded, NoValues, TodaySeverity.Neutral, null, link);
-
-    private static TodayCard Attention(string id, string kind, string title, string text,
-        IReadOnlyDictionary<string, TodayValue> values, TodaySeverity severity, string link) =>
-        new($"money.{id}", Module, TodayCardType.Attention, kind, title, null, text, values, severity, null, link);
 }
