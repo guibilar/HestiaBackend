@@ -21,6 +21,13 @@ public static class FinanceAlertRules
     public const string BudgetsLink = "/money/budgets";
     /// <summary>The Transactions page with the statement import open (T57).</summary>
     public const string TransactionsImportLink = "/money/transactions#import";
+
+    /// <summary>
+    /// The Transactions page with the statement import open and this account selected (T63). The clients read
+    /// <c>importAccount</c> with the fragment; an old client ignores it and opens the import with no account.
+    /// </summary>
+    public static string TransactionsImportLinkFor(Guid accountId) =>
+        $"/money/transactions?importAccount={accountId:D}#import";
     public const string SubscriptionsLink = "/money/subscriptions";
     public const string UnsortedLink = "/money/rules#unsorted";
 
@@ -102,7 +109,7 @@ public static class FinanceAlertRules
                     ["account"] = AlertValue.Plain(account.Name),
                     ["reach"] = AlertValue.Day(StatementsReach(account)!.Value)
                 },
-                AlertSeverity.Warning, TransactionsImportLink, $"3|{index++:D4}");
+                AlertSeverity.Warning, TransactionsImportLinkFor(account.Id), $"3|{index++:D4}");
         }
 
         index = 0;

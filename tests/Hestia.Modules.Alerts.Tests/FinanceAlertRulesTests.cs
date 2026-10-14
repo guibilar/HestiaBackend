@@ -78,7 +78,7 @@ public sealed class FinanceAlertRulesTests
         Assert.Equal(AlertValue.Percent(120m), items[0].Values["used"]);
         Assert.Equal(AlertSeverity.Bad, items[0].Severity);
         Assert.Equal(AlertValue.Day(new DateOnly(2026, 6, 30)), items[1].Values["reach"]);
-        Assert.Equal(FinanceAlertRules.TransactionsImportLink, items[1].Link);
+        Assert.StartsWith("/money/transactions?importAccount=", items[1].Link);
         // The sort keys keep the order of the rules on Today.
         Assert.Equal(items.Select(item => item.SortKey).Order(StringComparer.Ordinal), items.Select(item => item.SortKey));
     }
@@ -95,6 +95,20 @@ public sealed class FinanceAlertRulesTests
         Assert.Equal(AlertValue.Count(9), item.Values["days"]);
         Assert.Equal("/money/transactions#import", item.Link);
         Assert.Empty(FinanceAlertRules.Alerts(Inputs(accounts: accounts), new DateOnly(2026, 9, 3), Toronto));
+    }
+
+    [Fact]
+    public void StatementsBehind_LinksToTheImport_WithTheAccountSelected()
+    {
+        var id = Guid.Parse("0199a1a1-0000-7000-8000-0000000000ab");
+        var account = NewAccount("TFSA", "Wealthsimple", balanceDate: "2026-06-30T00:00:00Z") with { Id = id };
+
+        var item = Assert.Single(FinanceAlertRules.Alerts(Inputs(accounts: [account]), September5, Toronto));
+
+        // T63: the clients open the import with this account. "No recent import" keeps the plain import link.
+        Assert.Equal($"money.statements-behind.{id}", item.Key);
+        Assert.Equal("/money/transactions?importAccount=0199a1a1-0000-7000-8000-0000000000ab#import", item.Link);
+        Assert.Equal("/money/transactions#import", FinanceAlertRules.TransactionsImportLink);
     }
 
     [Fact]
