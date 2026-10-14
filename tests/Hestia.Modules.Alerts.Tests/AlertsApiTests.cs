@@ -77,7 +77,9 @@ public sealed class AlertsApiTests
 
         var list = await GetAlertsAsync(client);
 
-        Assert.Equal(MoneyKeys.Order(), list.Alerts.Select(alert => alert.Id).Order());
+        // The real day: the alerts that depend on the date can differ from the other tests. The budget does not.
+        Assert.Contains(list.Alerts, alert => alert.Id == $"money.budget-over.{FinanceData.GroceriesId}");
+        Assert.All(list.Alerts, alert => Assert.StartsWith("money.", alert.Id));
         // The real clock: finance checks the token. The checks run as the system identity, read-only.
         Assert.All(finance.Requests, request =>
             Assert.Equal(("hestia-system", "system:Alerts.FinanceAlertSource", "read-only"),

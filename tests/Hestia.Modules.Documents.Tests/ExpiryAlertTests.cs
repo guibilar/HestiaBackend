@@ -27,9 +27,10 @@ public class ExpiryAlertTests
         public override DateTimeOffset GetUtcNow() => now;
     }
 
-    // Noon in Toronto on October 13th, 2026.
-    private static readonly DateTimeOffset Now = new(2026, 10, 13, 16, 0, 0, TimeSpan.Zero);
-    private static readonly DateOnly Today = new(2026, 10, 13);
+    // Noon in Toronto on October 13th, 2036. A day after the real time: the module outbox sender compares the time of
+    // each event row (written with the real clock) with this clock, and delivers only rows that are due.
+    private static readonly DateTimeOffset Now = new(2036, 10, 13, 16, 0, 0, TimeSpan.Zero);
+    private static readonly DateOnly Today = new(2036, 10, 13);
 
     private static DocumentsHost Start(Dictionary<string, string?>? settings = null)
     {
