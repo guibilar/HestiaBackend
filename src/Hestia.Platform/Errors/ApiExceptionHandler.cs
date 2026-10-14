@@ -3,13 +3,15 @@ using Hestia.Platform.Finance;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Logging;
 
 namespace Hestia.Platform.Errors;
 
 /// <summary>
 /// Turns exceptions into RFC 9457 problem details. Platform exceptions become 400/404/409 with
-/// their message. A failed finance call (<see cref="FinanceRequestException"/>) is logged and becomes 502.
+/// their message. A request that cannot be read (<see cref="BadHttpRequestException"/>, for example a bad enum value or a
+/// body over the size limit) gets its own status code (400, 413), as in Production. A failed finance call (<see cref="FinanceRequestException"/>) is logged and becomes 502.
 /// Other exceptions are logged and returned as a generic 500.
 /// </summary>
 public class ApiExceptionHandler(IProblemDetailsService problemDetails, ILogger<ApiExceptionHandler> logger)
@@ -30,6 +32,22 @@ public class ApiExceptionHandler(IProblemDetailsService problemDetails, ILogger<
                 {
                     Status = StatusCodes.Status400BadRequest
                 }
+            });
+        }
+
+        if (exception is BadHttpRequestException badRequest)
+        {
+            // Minimal APIs throw this in Development (RouteHandlerOptions.ThrowOnBadRequest), and Kestrel throws it for a
+            // body over the limit. In Production, minimal APIs set the status code without a body, and the status code
+            // pages write the problem details. This gives the same answer: the status code and its reason phrase.
+            var badStatus = badRequest.StatusCode is >= 400 and < 500 ? badRequest.StatusCode : StatusCodes.Status400BadRequest;
+            logger.LogDebug(exception, "Bad request for {Method} {Path}", context.Request.Method, context.Request.Path);
+            context.Response.StatusCode = badStatus;
+            return await problemDetails.TryWriteAsync(new ProblemDetailsContext
+            {
+                HttpContext = context,
+                Exception = exception,
+                ProblemDetails = new ProblemDetails { Status = badStatus, Title = ReasonPhrases.GetReasonPhrase(badStatus) }
             });
         }
 

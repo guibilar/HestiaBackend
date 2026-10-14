@@ -35,8 +35,8 @@ foreach (var module in modules)
 }
 
 builder.Services.AddHealthChecks()
-    .AddCheck<DatabaseHealthCheck>("database", tags: [ReadyTag])
-    .AddCheck<FinanceHealthCheck>("finance", tags: [ReadyTag]);
+    .AddCheck<DatabaseHealthCheck>("database", tags: [HealthTags.Ready])
+    .AddCheck<FinanceHealthCheck>("finance", tags: [HealthTags.Ready]);
 
 var app = builder.Build();
 
@@ -69,8 +69,9 @@ app.UseRateLimiter();
 
 // Liveness: the process answers (no dependencies, so a database outage does not restart the host).
 app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false }).AllowAnonymous();
-// Readiness: the host can serve requests (each module database and the finance backend answer).
-app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Tags.Contains(ReadyTag) }).AllowAnonymous();
+// Readiness: the host can serve requests (each module database and the finance backend answer, and the checks that the
+// modules add, for example the documents volume).
+app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Tags.Contains(HealthTags.Ready) }).AllowAnonymous();
 
 foreach (var module in modules)
 {
@@ -88,7 +89,4 @@ FinanceProxy.WarnAboutOverlaps(app);
 app.Run();
 
 // Exposed for WebApplicationFactory in the integration tests.
-public partial class Program
-{
-    private const string ReadyTag = "ready";
-}
+public partial class Program { }

@@ -169,6 +169,11 @@ The Today screen shows cards from all modules (T08, see the README, section "Tod
   providers of other modules; test your provider in your module's tests, and read only your module's cards.
 - **JSON with enums in tests:** the host reads enums by name only. Send a request body with
   `PutAsJsonAsync(url, body, HestiaApiFactory.Json)`.
+- **A readiness check (T59):** a module that needs something outside the database (for example a folder) adds its own
+  check: `services.AddHealthChecks().AddCheck<MyCheck>("my-module-thing", tags: [HealthTags.Ready])`. It is then part
+  of `/health/ready`. Never add it to `/health/live`: Docker restarts the container when `/health/live` fails.
+- **Files in tests:** `HestiaApiFactory` gives each host a private, empty `Documents:StoragePath` folder, and deletes
+  it at the end. A test can set its own folder.
 - **Times in tests:** PostgreSQL keeps microseconds, .NET keeps 100 ns. Compare a time that went through the database
   with a time from the database, not with the value that the code made.
 

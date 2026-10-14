@@ -232,6 +232,25 @@ jobs:
             = "$(sha256sum "$samples/scanned-warranty.pdf" | cut -d' ' -f1)" ]
           # The file is on the documents volume, owned by the host's user.
           docker exec hestia-api sh -c 'find /data/documents -type f ! -path "*/tmp/*" | wc -l'
+      # T59: the command lists an old file that no document uses, deletes it only with --delete, and keeps the files
+      # of the documents. Then /health/ready is still 200 (the documents-storage check writes to the volume).
+      - name: documents-clean-files in the image, and the documents-storage readiness check
+        run: |
+          key="ab/ab$(printf 'c%.0s' $(seq 62))"
+          docker exec hestia-api sh -c "mkdir -p /data/documents/ab && printf unused > /data/documents/$key && touch -d '2 hours ago' /data/documents/$key"
+          before=$(docker exec hestia-api sh -c 'find /data/documents -type f ! -path "*/tmp/*" | wc -l')
+          output=$(docker compose run --rm -T hestia-api documents-clean-files)
+          echo "$output"
+          echo "$output" | grep -q "unused    $key"
+          echo "$output" | grep -q '1 unused file(s)'
+          docker exec hestia-api test -f "/data/documents/$key"
+          output=$(docker compose run --rm -T hestia-api documents-clean-files --delete)
+          echo "$output"
+          echo "$output" | grep -q "deleted   $key"
+          if docker exec hestia-api test -e "/data/documents/$key"; then echo "The unused file is still there."; exit 1; fi
+          after=$(docker exec hestia-api sh -c 'find /data/documents -type f ! -path "*/tmp/*" | wc -l')
+          test "$after" = "$((before - 1))"
+          curl -sf http://localhost:5097/health/ready
       - name: A module event reaches its consumer after the commit (in process)
         run: |
           curl -sf -H "Cookie: $SESSION_COOKIE" -X POST -H 'Content-Type: application/json' -d '{"name":"CI kettle"}' \
