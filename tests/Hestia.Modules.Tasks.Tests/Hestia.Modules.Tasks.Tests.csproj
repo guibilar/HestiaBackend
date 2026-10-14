@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <!-- xUnit v3 test projects are self-running executables (Microsoft Testing Platform). -->
+    <OutputType>Exe</OutputType>
+    <!-- xUnit1051 asks every call to pass TestContext.Current.CancellationToken. These tests make short
+         in-process HTTP calls, and a cancelled run ends with the process, so the tokens would only add noise. -->
+    <NoWarn>$(NoWarn);xUnit1051</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Direct reference: it copies the host's deps file and content root next to the tests. -->
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="xunit.v3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Hestia.Api\Hestia.Api.csproj" />
+    <ProjectReference Include="..\Hestia.Testing\Hestia.Testing.csproj" />
+  </ItemGroup>
+
+</Project>
