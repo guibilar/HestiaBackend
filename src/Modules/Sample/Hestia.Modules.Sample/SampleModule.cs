@@ -39,6 +39,8 @@ public static class SampleModuleExtensions
         services.AddScoped<ISampleItemQueries, SampleItemQueries>();
         // Event consumers (SampleItemCreatedConsumer) need no registration: Wolverine finds them in the module assembly.
         services.AddScoped<SampleActivityQueries>();
+        // T47 probe: a lambda registration that Wolverine cannot build. Do not merge.
+        services.AddScoped<Application.IProbeService>(_ => new Application.ProbeService());
         return services;
     }
 
