@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using Hestia.Modules.Identity.Contracts;
 using Hestia.Testing;
 using Microsoft.AspNetCore.Authorization;
@@ -53,6 +54,36 @@ public class AuthTests
     }
 
     [Fact]
+    public async Task Me_AsJson_HasTheUsernameAndTheScope()
+    {
+        await using var factory = await WithAccountAsync();
+        var client = factory.CreateClient();
+        await LoginAsync(client);
+
+        // The clients read these two names (T60).
+        using var me = JsonDocument.Parse(await client.GetStringAsync("/api/Auth/me"));
+        Assert.Equal(Username, me.RootElement.GetProperty("username").GetString());
+        Assert.Equal("full", me.RootElement.GetProperty("scope").GetString());
+    }
+
+    [Fact]
+    public async Task TheOpenApiDocument_DescribesTheScopeOfTheCurrentUser()
+    {
+        await using var factory = new HestiaApiFactory();
+
+        var response = await factory.CreateClient().GetAsync("/openapi/v1.json");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var user = document.RootElement.GetProperty("components").GetProperty("schemas").GetProperty("CurrentUserDto");
+        Assert.True(user.GetProperty("properties").TryGetProperty("scope", out _));
+        var me = document.RootElement.GetProperty("paths").GetProperty("/api/Auth/me").GetProperty("get");
+        Assert.Contains("CurrentUserDto",
+            me.GetProperty("responses").GetProperty("200").GetProperty("content").GetProperty("application/json")
+                .GetProperty("schema").GetProperty("$ref").GetString());
+    }
+
+    [Fact]
     public async Task Login_SetsAStrictHttpOnlyCookie_ThatOpensTheModulesUntilLogout()
     {
         await using var factory = await WithAccountAsync();
@@ -61,13 +92,14 @@ public class AuthTests
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/Auth/me")).StatusCode);
         var login = await LoginAsync(client, username: "ALEX");
         Assert.Equal(HttpStatusCode.OK, login.StatusCode);
-        Assert.Equal(Username, (await login.ReadAsync<CurrentUserDto>()).Username);
+        Assert.Equal(new CurrentUserDto(Username, "full"), await login.ReadAsync<CurrentUserDto>());
         var cookie = Assert.Single(login.Headers.GetValues("Set-Cookie"), c => c.StartsWith("finance_session="));
         Assert.Contains("httponly", cookie.ToLowerInvariant());
         Assert.Contains("samesite=strict", cookie.ToLowerInvariant());
         Assert.DoesNotContain("expires=", cookie.ToLowerInvariant()); // not "remember me": a session cookie
 
-        Assert.Equal(Username, (await (await client.GetAsync("/api/Auth/me")).ReadAsync<CurrentUserDto>()).Username);
+        // A cookie user can write: the scope is always "full" (T60).
+        Assert.Equal(new CurrentUserDto(Username, "full"), await (await client.GetAsync("/api/Auth/me")).ReadAsync<CurrentUserDto>());
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/sample/items")).StatusCode);
 
         Assert.Equal(HttpStatusCode.NoContent, (await client.PostAsync("/api/Auth/logout", null)).StatusCode);

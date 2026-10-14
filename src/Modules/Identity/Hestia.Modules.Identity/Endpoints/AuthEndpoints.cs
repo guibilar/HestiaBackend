@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Hestia.Modules.Identity.Application;
 using Hestia.Modules.Identity.Contracts;
+using Hestia.Platform.Auth;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
@@ -34,8 +35,8 @@ public static class AuthEndpoints
             })
             .AllowAnonymous();
 
-        // Who is signed in; 401 when nobody is.
-        auth.MapGet("/me", (ClaimsPrincipal user) => new CurrentUserDto(user.Identity!.Name!));
+        // Who is signed in, and the scope (the same rule as the authorization, HestiaUser.ScopeOf); 401 when nobody is.
+        auth.MapGet("/me", (ClaimsPrincipal user) => new CurrentUserDto(user.Identity!.Name!, HestiaUser.ScopeOf(user)));
 
         auth.MapPost("/change-password", ChangePasswordAsync)
             .RequireRateLimiting(SignInGuard.PolicyName);
@@ -65,7 +66,8 @@ public static class AuthEndpoints
         // User names match without case; answer with the stored spelling.
         if (result.Succeeded)
         {
-            return Results.Ok(new CurrentUserDto(user.UserName!));
+            // A password sign-in (the cookie) always has the full scope.
+            return Results.Ok(new CurrentUserDto(user.UserName!, HestiaUser.FullScope));
         }
         return result.IsLockedOut ? LockedOut() : SignInFailed();
     }
