@@ -142,7 +142,7 @@ public sealed class TodayEndpointTests
         var behind = Single(today, $"money.statements-behind.{FinanceData.TfsaId}");
         Assert.Equal("{account}: statements reach {reach}. Import last month's", behind.Text);
         Assert.Equal(TodayValue.Day(new DateOnly(2026, 6, 30)), behind.Values["reach"]);
-        Assert.Equal("/money/transactions#import", behind.Link);
+        Assert.Equal($"/money/transactions?importAccount={FinanceData.TfsaId}#import", behind.Link);
 
         var price = Single(today, "money.price-changed.NETFLIX");
         Assert.Equal("{payment} went up from {from} to {to}", price.Text);

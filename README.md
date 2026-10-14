@@ -242,7 +242,8 @@ logic is in one place, here, and not in the web and Android clients.
   | --- | --- |
   | Net worth tile | `/money/net-worth` |
   | Budgets tile, budget over its limit | `/money/budgets` |
-  | No recent import, statement to import | `/money/transactions#import` (Transactions, with the import open; T57) |
+  | No recent import | `/money/transactions#import` (Transactions, with the import open; T57) |
+  | Statement to import (one account) | `/money/transactions?importAccount=<accountId>#import` (the import open, with that account selected; T63) |
   | Price change | `/money/subscriptions` |
   | Transactions that no rule sorts | `/money/rules#unsorted` |
   | Document that expires or expired | `/documents/<id>` |
