@@ -13,8 +13,8 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
 using Npgsql;
 using Wolverine;
-using Wolverine.ErrorHandling;
 using Wolverine.Configuration;
+using Wolverine.ErrorHandling;
 using Wolverine.RabbitMQ;
 using Wolverine.RabbitMQ.Internal;
 

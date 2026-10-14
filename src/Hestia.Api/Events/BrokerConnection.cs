@@ -1,11 +1,10 @@
 using Hestia.Contracts.Finance;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
-using Wolverine.Configuration;
-using Endpoint = Wolverine.Configuration.Endpoint;
 using Wolverine.RabbitMQ.Internal;
 using Wolverine.Runtime;
 using Wolverine.Transports;
+using Endpoint = Wolverine.Configuration.Endpoint;
 
 namespace Hestia.Api.Events;
 
