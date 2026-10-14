@@ -14,7 +14,9 @@ using Microsoft.Extensions.Options;
 using Npgsql;
 using Wolverine;
 using Wolverine.ErrorHandling;
+using Wolverine.Configuration;
 using Wolverine.RabbitMQ;
+using Wolverine.RabbitMQ.Internal;
 
 namespace Hestia.Api.Events;
 
@@ -153,6 +155,9 @@ internal sealed class HestiaEventsSetup(
             // Declares the exchange, the queue, and the binding when they do not exist (idempotent).
             wolverine.UseRabbitMq(ParseRabbitMq(options.RabbitMq))
                 .AutoProvision()
+                // No request/reply over the broker. Its system queue is a listener, and a listener whose broker is down
+                // stops the start of the host (T37).
+                .DisableSystemRequestReplyQueueDeclaration()
                 .DeclareExchange(FinanceEventTopology.Exchange, exchange =>
                 {
                     exchange.ExchangeType = ExchangeType.Fanout;
@@ -161,7 +166,10 @@ internal sealed class HestiaEventsSetup(
             // Inline: the broker removes a message only after its consumers finished. A consumer that fails gets the
             // retries of ConsumerRetries; after them, or at once for other errors, the message goes to the
             // dead-letter queue of the broker (wolverine-dead-letter-queue).
-            wolverine.ListenToRabbitQueue(FinanceEventTopology.HostQueue).ProcessInline();
+            // T37: the queue is declared, but it is not a Wolverine listener: Wolverine starts listeners at the start of
+            // the host, and a broker that is down then stops the start. BrokerReconnector starts the listener as soon
+            // as the host has started, and again after a broker outage.
+            wolverine.Transports.GetOrCreate<RabbitMqTransport>().Queues[FinanceEventTopology.HostQueue].Mode = EndpointMode.Inline;
 
             // The host is the gateway: a broker that is down when the host starts must not stop it. The host then
             // starts without the finance events and logs the error. BrokerReconnector connects when the broker is

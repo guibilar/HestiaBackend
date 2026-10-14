@@ -1,3 +1,4 @@
+using Hestia.Contracts.Finance;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
 using Wolverine.Configuration;
@@ -29,9 +30,12 @@ internal static class FinanceBroker
     public static RabbitMqTransport? Transport(IWolverineRuntime runtime, EventsOptions options) =>
         string.IsNullOrWhiteSpace(options.RabbitMq) ? null : runtime.Options.Transports.OfType<RabbitMqTransport>().FirstOrDefault();
 
-    /// <summary>The endpoints that the host listens to on the broker (the queue of the finance events).</summary>
+    /// <summary>
+    /// The endpoints that the host listens to on the broker: the queue of the finance events. It is not a Wolverine
+    /// listener (see <see cref="HestiaEventsSetup"/>), so <see cref="BrokerReconnector"/> starts it.
+    /// </summary>
     public static IEnumerable<Endpoint> Listeners(RabbitMqTransport transport) =>
-        transport.Endpoints().Where(endpoint => endpoint.IsListener);
+        [transport.Queues[FinanceEventTopology.HostQueue]];
 
     /// <summary>True when the listener of the endpoint takes messages.</summary>
     public static bool Accepting(IWolverineRuntime runtime, Endpoint endpoint) =>
@@ -83,12 +87,13 @@ public sealed class BrokerHealthCheck(IWolverineRuntime runtime, IOptionsMonitor
 }
 
 /// <summary>
-/// Connects the RabbitMQ transport again when the broker was down at the start of the host (T37). Wolverine (with
-/// <c>ContinueOnFailures</c>) then starts the host without the transport and does not try again. Every
-/// <see cref="BrokerOptions.ReconnectInterval"/>, this service:
+/// Starts the listener of the finance events, and connects the RabbitMQ transport when the broker was down at the start
+/// of the host (T37). Wolverine (with <c>ContinueOnFailures</c>) then starts the host without the transport and does
+/// not try again. At once after the start, and then every <see cref="BrokerOptions.ReconnectInterval"/>, this service:
 /// <list type="number">
 /// <item>connects the transport, when it never connected, and declares the exchange, the queue, and the binding;</item>
-/// <item>starts each listener that never started or stopped.</item>
+/// <item>starts the listener when it never started or stopped. The queue is not a Wolverine listener, because
+/// Wolverine starts its listeners at the start of the host, and a broker that is down then stops the start.</item>
 /// </list>
 /// A broker that goes down <i>after</i> a connection needs nothing from this service: the RabbitMQ client recovers the
 /// connection itself, and Wolverine rebuilds its channels.
@@ -185,7 +190,7 @@ internal sealed class BrokerReconnector(
         foreach (var endpoint in FinanceBroker.Listeners(transport).Where(endpoint => FinanceBroker.NeedsStart(runtime, endpoint)))
         {
             await runtime.Endpoints.StartListenerAsync(endpoint, cancellationToken);
-            logger.LogInformation("Events: the host listens to {Queue} again", endpoint.EndpointName);
+            logger.LogInformation("Events: the host listens to the queue {Queue}", endpoint.EndpointName);
         }
     }
 
