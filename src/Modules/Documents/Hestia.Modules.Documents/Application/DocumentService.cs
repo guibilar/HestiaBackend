@@ -30,7 +30,8 @@ public sealed record DocumentQuery(
     string? ExpiresFrom,
     string? ExpiresTo,
     int Page,
-    int PageSize);
+    int PageSize,
+    string? Expiring = null);
 
 /// <summary>A file to send to the client.</summary>
 public sealed record DocumentFileContent(string Path, string ContentType, string FileName);
@@ -210,6 +211,17 @@ public sealed class DocumentService(
         if (DocumentDetails.ParseDay(query.ExpiresTo, "expiresTo") is { } to)
         {
             documents = documents.Where(d => d.ExpiresOn <= to);
+        }
+        if (!string.IsNullOrWhiteSpace(query.Expiring))
+        {
+            // T86: the "Expire soon" list, with "today" of the server: from today to Expiry:SoonDays ahead.
+            if (!string.Equals(query.Expiring.Trim(), "soon", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidInputException("expiring", "Use expiring=soon.");
+            }
+            var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(time.GetUtcNow(), options.Value.GetTimeZone()).DateTime);
+            var last = today.AddDays(options.Value.Expiry.SoonDays);
+            documents = documents.Where(d => d.ExpiresOn >= today && d.ExpiresOn <= last);
         }
 
         var text = query.Text?.Trim() ?? string.Empty;

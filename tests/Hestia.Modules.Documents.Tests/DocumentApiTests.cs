@@ -153,10 +153,31 @@ public class DocumentApiTests
         Assert.Single(page.Items[0].Files);
     }
 
+    [Fact]
+    public async Task ExpiringSoon_ListsTheDocumentsThatExpire_FromTheServersToday_ToTheSoonDays()
+    {
+        await using var host = DocumentsHost.Start(new Dictionary<string, string?>
+        {
+            ["Documents:TimeZone"] = "UTC",
+            ["Documents:Expiry:SoonDays"] = "30",
+        });
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var soon = await host.UploadOkAsync("Passport", "Other", expiresOn: today.AddDays(10).ToString("yyyy-MM-dd"));
+        var lastDay = await host.UploadOkAsync("Insurance", "Insurance", expiresOn: today.AddDays(30).ToString("yyyy-MM-dd"));
+        await host.UploadOkAsync("Lease", "Lease", expiresOn: today.AddDays(31).ToString("yyyy-MM-dd"));
+        await host.UploadOkAsync("Old warranty", "Warranty", expiresOn: today.AddDays(-1).ToString("yyyy-MM-dd"));
+        await host.UploadOkAsync("Receipt", "Receipt");
+
+        var found = await ListAsync(host, "expiring=Soon");
+
+        Assert.Equal(new[] { lastDay.Id, soon.Id }, found.Items.Select(d => d.Id));
+    }
+
     [Theory]
     [InlineData("kind=Spaceship", "kind")]
     [InlineData("expiresFrom=tomorrow", "expiresFrom")]
     [InlineData("expiresTo=2026-13-01", "expiresTo")]
+    [InlineData("expiring=later", "expiring")]
     [InlineData("pageSize=101", "pageSize")]
     public async Task List_WithAFilterThatCannotBeUsed_IsABadRequest(string query, string field)
     {

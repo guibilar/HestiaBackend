@@ -28,6 +28,14 @@ public sealed partial class DocumentsOptions
     /// </summary>
     public string[]? AllowedContentTypes { get; set; }
 
+    /// <summary>
+    /// IANA time zone of this module, for "today" in <c>expiring=soon</c> (T86). Without a value, the shared
+    /// Hestia:TimeZone (T85).
+    /// </summary>
+    public string TimeZone { get; set; } = "UTC";
+
+    public TimeZoneInfo GetTimeZone() => TimeZoneInfo.FindSystemTimeZoneById(TimeZone);
+
     public OcrOptions Ocr { get; set; } = new();
 
     public ExpiryOptions Expiry { get; set; } = new();

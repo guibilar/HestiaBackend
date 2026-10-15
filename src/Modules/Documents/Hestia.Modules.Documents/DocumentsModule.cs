@@ -5,6 +5,7 @@ using Hestia.Modules.Documents.Contracts;
 using Hestia.Modules.Documents.Endpoints;
 using Hestia.Modules.Documents.Infrastructure;
 using Hestia.Platform.Health;
+using Hestia.Platform.Hosting;
 using Hestia.Platform.Modules;
 using Hestia.Platform.Persistence;
 using Microsoft.AspNetCore.Routing;
@@ -44,6 +45,8 @@ public static class DocumentsModuleExtensions
                     options.StoragePath = Path.GetFullPath(options.StoragePath, environment.ContentRootPath);
                 }
             })
+            // The shared zone (Hestia:TimeZone, T85), unless Documents:TimeZone overrides it (T86).
+            .PostConfigure(options => options.TimeZone = HestiaTimeZone.For(configuration, DocumentsOptions.SectionName))
             .Validate(options => options.IsValid(), DocumentsOptions.ValidationMessage)
             .ValidateOnStart();
 

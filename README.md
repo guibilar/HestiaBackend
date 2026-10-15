@@ -365,7 +365,7 @@ upload ──> files to the volume (by SHA-256) + rows and DocumentAdded (one sa
 | Endpoint | Description |
 | --- | --- |
 | `POST /` | Upload, as `multipart/form-data`: `files` (one or more), `title` (default: the first file name), `kind` (`Receipt`, `Warranty`, `Lease`, `Tax`, `Insurance`, `Manual`, `Other`; default `Other`), `tags` (repeat the field, or use commas), `issuedOn` and `expiresOn` (`yyyy-MM-dd`), `notes`. Answers 201 at once, with `ocrStatus` `Pending`. |
-| `GET /?kind=&tag=&q=&expiresFrom=&expiresTo=&page=1&pageSize=20` | A page of documents, newest first. `q` is a full-text search (best match first). |
+| `GET /?kind=&tag=&q=&expiresFrom=&expiresTo=&expiring=&page=1&pageSize=20` | A page of documents, newest first. `q` is a full-text search (best match first). `expiring=soon`: from today (the host's time zone) to `Expiry:SoonDays` ahead (T86). |
 | `GET /{id}` | One document, with its OCR text. |
 | `PUT /{id}` | New details (all of them, JSON). The files stay. |
 | `DELETE /{id}` | Deletes the document, its links, and its files. |
@@ -434,7 +434,8 @@ A second source (`DocumentFileAlerts`, T80) gives `documents.files-missing` from
 | `Ocr:Language` | `eng` | The Tesseract language(s). Docker: `DOCUMENTS_OCR_LANGUAGE`. |
 | `Ocr:Timeout` | `00:10:00` | The longest OCR of one file. |
 | `Ocr:PollInterval` | `00:01:00` | How often the worker looks for `Pending` documents without an upload signal. |
-| `Expiry:SoonDays`, `Expiry:ExpiredDays` | `30`, `7` | The windows of the expiry alerts. |
+| `Expiry:SoonDays`, `Expiry:ExpiredDays` | `30`, `7` | The windows of the expiry alerts. `SoonDays` is also the window of `expiring=soon`. |
+| `TimeZone` | `Hestia:TimeZone` | The IANA time zone of "today" for `expiring=soon` (T86). |
 | `FileCheck:Enabled` | `true` | `false`: no weekly file check (the command still works). |
 | `FileCheck:Interval` | `7.00:00:00` | The time between two file checks (at most 49 days). |
 | `FileCheck:FirstDelay` | `00:10:00` | The time from the start of the host to the first file check. |
