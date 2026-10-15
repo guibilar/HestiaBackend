@@ -727,6 +727,42 @@ and `people.loan-overdue.<loan id>` (an open loan after its due day). Each check
 
 **Backups.** The `people` schema is in the Hestia database. The CI backup check restores a person with a contact.
 
+
+## Journal
+
+The Journal module (T21, schema `journal`) keeps one entry per day: free text, a streak, and "On this day" (the same day
+in earlier years).
+
+**Data.** An entry has a day (unique), a text (required, at most 20000 characters, trimmed), and its times. A day after
+today (in the shared time zone, `Hestia:TimeZone`) is refused.
+
+**Streak.** The days in a row with an entry, up to today. Without an entry today, the row up to yesterday counts, so the
+streak goes on when the user writes today. **On this day:** the same month and day in the 30 years before. On February 28
+of a common year, February 29 of the leap years counts too.
+
+**Endpoints** (prefix `/api/journal`; a read-only user can call the GET endpoints only):
+
+| Endpoint | Description |
+| --- | --- |
+| `GET /summary` | `date`, `streak`, `week` (the last 7 days, oldest first, `{day, written}`), `today` (the entry or null), `onThisDay` (`{yearsAgo, entry}`, the latest year first), `entryCount`. |
+| `GET /entries?q=&from=&to=&page=1&pageSize=20` | A page of entries, newest first (`excerpt`: 200 characters on one line; `length`). `q`: full-text search (PostgreSQL, "english" and "simple"), best match first. |
+| `GET /entries/{day}` | The entry of a day (`yyyy-MM-dd`), or 404. |
+| `PUT /entries/{day}` | Writes the whole text of the day: 201 for a new entry, 200 for a change (the same text: no change, no event). |
+| `DELETE /entries/{day}` | Deletes the entry of the day. |
+
+```bash
+curl -b cookies -X PUT -H 'Content-Type: application/json' -d '{"text":"Long walk by the river."}' \
+  http://localhost:5097/api/journal/entries/2026-10-10
+curl -b cookies http://localhost:5097/api/journal/summary
+```
+
+**Events (durable, T38, T78).** `JournalEntrySaved` (`Created` true for a new entry) and `JournalEntryDeleted`, in
+`Hestia.Modules.Journal.Contracts`. Other modules read entries with `IJournalQueries` (`FindAsync(day)`,
+`ListAsync(from, to)`): Timeline (T16) and Search (T17).
+
+**Today.** The tile `journal.streak` (module `Journal`, order 140): the streak as a count, "Not written today" until today
+has an entry, and Good when it has one. Link `/journal`.
+
 ## OpenAPI document
 
 The host describes the module endpoints (not the finance paths) at `/openapi/v1.json`, with `/api/Auth/*`

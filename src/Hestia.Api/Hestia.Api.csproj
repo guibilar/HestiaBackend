@@ -30,6 +30,7 @@
     <ProjectReference Include="..\Modules\Home\Hestia.Modules.Home\Hestia.Modules.Home.csproj" />
     <ProjectReference Include="..\Modules\Identity\Hestia.Modules.Identity\Hestia.Modules.Identity.csproj" />
     <ProjectReference Include="..\Modules\People\Hestia.Modules.People\Hestia.Modules.People.csproj" />
+    <ProjectReference Include="..\Modules\Journal\Hestia.Modules.Journal\Hestia.Modules.Journal.csproj" />
     <ProjectReference Include="..\Modules\Sample\Hestia.Modules.Sample\Hestia.Modules.Sample.csproj" />
     <ProjectReference Include="..\Modules\Tasks\Hestia.Modules.Tasks\Hestia.Modules.Tasks.csproj" />
     <ProjectReference Include="..\Modules\Today\Hestia.Modules.Today\Hestia.Modules.Today.csproj" />
