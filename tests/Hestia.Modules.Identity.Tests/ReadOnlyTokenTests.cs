@@ -86,7 +86,7 @@ public class ReadOnlyTokenTests
             .Order(StringComparer.Ordinal)
             .ToList();
         Assert.Equal(["/api/Budget/Filter", "/api/CategoryRules/Preview", "/api/Reports/breakdown", "/api/Reports/merchants",
-            "/api/Transaction/Filter"], queries);
+            "/api/Transaction/Filter", "/api/documents/by-link/counts"], queries);
 
         foreach (var endpoint in endpoints)
         {

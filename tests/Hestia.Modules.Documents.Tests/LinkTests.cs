@@ -147,6 +147,35 @@ public class LinkTests
     }
 
     [Fact]
+    public async Task Counts_GivesTheDocumentsOfEachTransaction_ZeroIncluded()
+    {
+        var (host, finance, transactions) = await StartAsync();
+        await using var _host = host;
+        await using var _finance = finance;
+        var linked = Guid.NewGuid();
+        transactions.Known.Add(linked);
+        var plain = Guid.NewGuid();
+        var receipt = await host.UploadOkAsync("Receipt", "Receipt");
+        var warranty = await host.UploadOkAsync("Warranty", "Warranty");
+        foreach (var document in new[] { receipt, warranty })
+        {
+            Assert.Equal(HttpStatusCode.Created, (await host.Client.PostAsJsonAsync($"{Documents}/{document.Id}/links",
+                new CreateDocumentLinkRequest(Kind, linked.ToString()))).StatusCode);
+        }
+
+        var response = await host.Client.PostAsJsonAsync($"{Documents}/by-link/counts",
+            new DocumentLinkCountsRequest(Kind, [linked.ToString().ToUpperInvariant(), plain.ToString()]));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var counts = await response.ReadAsync<Dictionary<string, int>>();
+        Assert.Equal(new Dictionary<string, int> { [linked.ToString("D")] = 2, [plain.ToString("D")] = 0 }, counts);
+        await UploadTests.AssertBadRequestAsync(await host.Client.PostAsJsonAsync($"{Documents}/by-link/counts",
+            new DocumentLinkCountsRequest("Journal.Entry", [])), "kind");
+        await UploadTests.AssertBadRequestAsync(await host.Client.PostAsJsonAsync($"{Documents}/by-link/counts",
+            new DocumentLinkCountsRequest(Kind, Enumerable.Range(0, 201).Select(_ => Guid.NewGuid().ToString()).ToList())), "targetIds");
+    }
+
+    [Fact]
     public async Task FinanceDown_TheLinkIs502_AndNothingIsStored()
     {
         var (host, finance, transactions) = await StartAsync();
