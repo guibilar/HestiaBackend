@@ -132,6 +132,10 @@ jobs:
       EVENTS_RABBITMQ_URL: amqp://hestia:ci-rabbitmq-password@rabbitmq:5672
       HESTIA_USERNAME: ci
       HESTIA_PASSWORD: ci-password-long-enough
+    # T45: each step through scripts/ci-step.sh: a failed step writes its last lines as an annotation.
+    defaults:
+      run:
+        shell: bash scripts/ci-step.sh {0}
     steps:
       - uses: actions/checkout@v7
       # T03: the key pair of the gateway tokens, as in the README ("Sign-in"). New for each run.
@@ -396,10 +400,13 @@ jobs:
         run: docker/ci/backup-restore-check.sh http://localhost:5097
       - name: Container logs
         if: failure()
+        shell: bash
         run: |
           docker compose logs
-          docker logs personal-finance-api
-          docker logs rabbitmq | tail -50
+          docker logs personal-finance-api || true
+          docker logs rabbitmq 2>&1 | tail -50 || true
+          # T45: the last lines of the host as an annotation.
+          echo "::error title=hestia-api log (last 30 lines)::$(docker logs --tail 30 hestia-api 2>&1 | sed -e 's/%/%25/g' -e 's/\r/%0D/g' | awk '{printf "%s%%0A", $0}')"
       - name: Stop the stack
         if: always()
         run: |
