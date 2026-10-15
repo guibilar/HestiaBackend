@@ -1,8 +1,8 @@
 using Hestia.Modules.Documents.Contracts;
 using Hestia.Modules.People.Contracts;
-using Hestia.Modules.Tasks.Contracts;
 using Hestia.Modules.People.Domain;
 using Hestia.Modules.People.Infrastructure;
+using Hestia.Modules.Tasks.Contracts;
 using Hestia.Platform.Exceptions;
 using Hestia.Platform.Paging;
 using Microsoft.EntityFrameworkCore;
