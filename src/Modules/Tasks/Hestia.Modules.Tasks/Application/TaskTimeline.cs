@@ -21,4 +21,14 @@ public sealed class TaskTimeline(TasksDbContext db) : ITimelineSource
             $"tasks.task-done.{c.Id:D}", Module, "task-done", range.DayOf(c.DoneAt), c.DoneAt,
             c.Title, c.RepeatEvery is null ? "Done" : "Done · repeats", null, $"/tasks/{c.TaskId:D}")).ToList());
     }
+
+    public async Task<DateOnly?> LatestBeforeAsync(TimelineRange range, CancellationToken cancellationToken)
+    {
+        var start = range.Start;
+        // Only completions of tasks that still exist show (the list joins the tasks).
+        var latest = await db.Completions.AsNoTracking().Where(c => c.DoneAt < start)
+            .Join(db.Tasks.AsNoTracking(), c => c.TaskId, t => t.Id, (c, _) => c.DoneAt)
+            .MaxAsync(at => (DateTimeOffset?)at, cancellationToken);
+        return latest is { } at ? range.DayOf(at) : null;
+    }
 }

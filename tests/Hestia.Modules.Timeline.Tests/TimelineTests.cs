@@ -130,8 +130,9 @@ public class TimelineTests
 
         var timeline = await host.TimelineAsync();
 
-        Assert.Equal((Today, new DateOnly(2026, 10, 4), Today, new DateOnly(2026, 10, 4)),
-            (timeline.Today, timeline.From, timeline.To, timeline.Earlier));
+        // Earlier: the next page ends on Oct 2 (PAYROLL), the latest day with an entry before this page.
+        Assert.Equal((Today, new DateOnly(2026, 10, 4), Today, new DateOnly(2026, 10, 3), true),
+            (timeline.Today, timeline.From, timeline.To, timeline.Earlier, timeline.HasEarlier));
         Assert.All(timeline.Modules, module => Assert.Equal(TimelineModuleStatus.Complete, module.Status));
         Assert.Equal(["Documents", "Home", "Journal", "Money", "People", "Tasks"], timeline.Modules.Select(m => m.Module));
         Assert.Equal([Today, new DateOnly(2026, 10, 9), new DateOnly(2026, 10, 8)], timeline.Days.Select(d => d.Day));
@@ -158,7 +159,7 @@ public class TimelineTests
         Assert.Equal(("contact", "Coffee with Marco Silva", "New job", (DateTimeOffset?)null), (contact.Kind, contact.Title, contact.Text, contact.At));
 
         // Finance got the days of the page, as the signed-in user.
-        var request = host.Finance.Requests.Single(r => r.Target == "/api/Transaction/Filter");
+        var request = host.Finance.Requests.Single(r => r.Target == "/api/Transaction/Filter" && r.Body.Contains("startDate"));
         Assert.Contains("\"startDate\":\"2026-10-04T00:00:00Z\"", request.Body);
         Assert.Contains("\"endDate\":\"2026-10-10T00:00:00Z\"", request.Body);
         Assert.Equal(TestSignIn.UserId, GatewayToken.SubjectOf(request));
@@ -180,6 +181,80 @@ public class TimelineTests
         // The transaction of Oct 2 is on this page; the one of today is not (finance gave it, but it is outside the days).
         Assert.Contains(page.Days.SelectMany(d => d.Entries), e => e.Title == "PAYROLL");
         Assert.DoesNotContain(page.Days.SelectMany(d => d.Entries), e => e.Title == "COSTCO");
+    }
+
+    [Fact]
+    public async Task Earlier_SkipsTheDaysWithoutEntries()
+    {
+        await using var host = await StartAsync();
+
+        // Oct 8 to 10: COSTCO. Before it, the latest entry is PAYROLL on Oct 2, so the next page ends on Oct 2.
+        var page = await host.TimelineAsync("?days=3");
+
+        Assert.Equal((new DateOnly(2026, 10, 8), new DateOnly(2026, 10, 3), true), (page.From, page.Earlier, page.HasEarlier));
+        var next = await host.TimelineAsync($"?before={page.Earlier:yyyy-MM-dd}&days=3");
+        Assert.Equal(new DateOnly(2026, 10, 2), next.Days[0].Day);
+        Assert.Contains(next.Days[0].Entries, e => e.Title == "PAYROLL");
+        // Finance was asked for the latest transaction before the page: one, up to the day before it.
+        Assert.Contains(host.Finance.Requests, r => r.Target == "/api/Transaction/Filter" && r.Body.Contains("\"pageSize\":1")
+            && r.Body.Contains("\"endDate\":\"2026-10-07T00:00:00Z\"") && !r.Body.Contains("startDate"));
+    }
+
+    [Fact]
+    public async Task NothingEarlier_HasEarlierIsFalse()
+    {
+        await using var host = await StartAsync();
+
+        // Sep 29 to Oct 1 (the review of September). No module has anything before it.
+        var page = await host.TimelineAsync("?before=2026-10-02&days=3");
+
+        Assert.Equal((false, page.From), (page.HasEarlier, page.Earlier));
+        Assert.Contains(page.Days.SelectMany(d => d.Entries), e => e.Kind == "month-review");
+    }
+
+    [Fact]
+    public async Task ASourceThatFails_MayHaveMore_SoThereIsSomethingEarlier()
+    {
+        await using var host = await StartAsync(data => data.Failures["POST /api/Transaction/Filter"] = 502);
+
+        var page = await host.TimelineAsync("?before=2026-10-02&days=3");
+
+        // Finance did not answer: the Timeline cannot know, so "Show earlier" stays, with the days before this page.
+        Assert.Equal((true, page.From), (page.HasEarlier, page.Earlier));
+    }
+
+    [Fact]
+    public async Task AMonthWithoutPurchasesOrSpending_HasNoReview()
+    {
+        await using var host = await StartAsync(data => data.Answers["GET /api/Reports/review"] = new { spending = 0m, purchases = 0, noSpendDays = 30 });
+
+        var page = await host.TimelineAsync("?before=2026-10-04&days=7");
+
+        Assert.DoesNotContain(page.Days.SelectMany(d => d.Entries), e => e.Kind == "month-review");
+        Assert.Equal(TimelineModuleStatus.Complete, page.Modules.Single(m => m.Module == "Money").Status);
+    }
+
+    [Fact]
+    public async Task EveryModule_SaysItsLatestDayBefore()
+    {
+        await using var host = await StartAsync(data => data.Answers["POST /api/Transaction/Filter"] = new { items = Array.Empty<object>(), totalCount = 0 });
+        await SeedAsync(host);
+
+        // The seed is on Oct 8 (contact), Oct 9 (person, document, item, task) and Oct 10 (journal).
+        foreach (var (module, before, latest) in new[]
+                 {
+                     ("People", "2026-10-11", new DateOnly(2026, 10, 9)), ("People", "2026-10-10", new DateOnly(2026, 10, 8)),
+                     ("Documents", "2026-10-11", new DateOnly(2026, 10, 9)), ("Home", "2026-10-11", new DateOnly(2026, 10, 9)),
+                     ("Tasks", "2026-10-11", new DateOnly(2026, 10, 9)),
+                 })
+        {
+            var page = await host.TimelineAsync($"?module={module}&before={before}&days=1");
+            Assert.Equal((module, true, latest.AddDays(1)), (module, page.HasEarlier, page.Earlier));
+        }
+        var journal = await host.TimelineAsync("?module=Journal&before=2026-10-10&days=1");
+        Assert.False(journal.HasEarlier);
+        var documents = await host.TimelineAsync("?module=Documents&before=2026-10-09&days=1");
+        Assert.False(documents.HasEarlier);
     }
 
     [Fact]

@@ -21,4 +21,12 @@ public sealed class DocumentTimeline(DocumentsDbContext db) : ITimelineSource
             $"documents.document-added.{d.Id:D}", Module, "document-added", range.DayOf(d.CreatedAt), d.CreatedAt,
             d.Title, d.Kind.ToString(), null, $"/documents/{d.Id:D}")).ToList());
     }
+
+    public async Task<DateOnly?> LatestBeforeAsync(TimelineRange range, CancellationToken cancellationToken)
+    {
+        var start = range.Start;
+        var latest = await db.Documents.AsNoTracking().Where(d => d.CreatedAt < start)
+            .MaxAsync(d => (DateTimeOffset?)d.CreatedAt, cancellationToken);
+        return latest is { } at ? range.DayOf(at) : null;
+    }
 }

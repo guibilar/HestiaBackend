@@ -17,4 +17,10 @@ public sealed class JournalTimeline(JournalDbContext db) : ITimelineSource
             $"journal.entry.{e.Id:D}", Module, "entry", e.Day, null, "Journal", JournalService.Excerpt(e.Text), null,
             $"/journal?day={e.Day:yyyy-MM-dd}")).ToList());
     }
+
+    public async Task<DateOnly?> LatestBeforeAsync(TimelineRange range, CancellationToken cancellationToken)
+    {
+        var from = range.From;
+        return await db.Entries.AsNoTracking().Where(e => e.Day < from).MaxAsync(e => (DateOnly?)e.Day, cancellationToken);
+    }
 }

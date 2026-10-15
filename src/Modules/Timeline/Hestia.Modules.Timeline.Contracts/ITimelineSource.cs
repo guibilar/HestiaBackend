@@ -19,6 +19,13 @@ public interface ITimelineSource
 
     /// <summary>The entries of the days of <paramref name="range"/>, in any order.</summary>
     Task<TimelineEntries> ListAsync(TimelineRange range, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The latest day before <paramref name="range"/> (before its <see cref="TimelineRange.From"/>) with an entry of this
+    /// module, or null when there is none. The Timeline uses it to skip the days without entries, and to know when there
+    /// is nothing earlier.
+    /// </summary>
+    Task<DateOnly?> LatestBeforeAsync(TimelineRange range, CancellationToken cancellationToken);
 }
 
 /// <summary>The days of one Timeline page, in the time zone of the host (<c>Hestia:TimeZone</c>).</summary>

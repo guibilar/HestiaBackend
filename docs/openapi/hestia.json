@@ -6506,6 +6506,10 @@
             "items": {
               "$ref": "#/components/schemas/TimelineModuleDto"
             }
+          },
+          "hasEarlier": {
+            "type": "boolean",
+            "default": true
           }
         }
       },
