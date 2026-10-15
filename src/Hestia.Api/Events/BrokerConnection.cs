@@ -93,19 +93,19 @@ internal static class FinanceBroker
         runtime.Endpoints.FindListeningAgent(endpoint.Uri)?.Status is null or ListeningStatus.Stopped or ListeningStatus.Unknown;
 
     /// <summary>True when the transport has a connection: it connected once, at the start or later.</summary>
-    public static async Task<bool> ConnectedOnceAsync(RabbitMqTransport transport, CancellationToken cancellationToken) =>
-        (await transport.ProbeAsync(cancellationToken)).Status != BrokerHealthStatus.Unknown;
+    public static async Task<bool> ConnectedOnceAsync(RabbitMqTransport transport, CancellationToken cancellationToken)
+    {
+        var probe = await transport.ProbeAsync(cancellationToken);
+        return probe.Status != BrokerHealthStatus.Unknown && probe.LastSuccessfulAt != DateTimeOffset.MinValue;
+    }
 
     /// <summary>
     /// True when the host gets the finance events: it has a connection to the broker, and its listener takes messages.
     /// The same rule as the readiness check <c>events-broker</c>.
     /// </summary>
-    public static async Task<bool> WorkingAsync(IWolverineRuntime runtime, RabbitMqTransport transport, CancellationToken cancellationToken)
-    {
-        var probe = await transport.ProbeAsync(cancellationToken);
-        return probe.Status is not (BrokerHealthStatus.Unknown or BrokerHealthStatus.Unhealthy) &&
-            Listeners(transport).All(endpoint => Accepting(runtime, endpoint));
-    }
+    public static async Task<bool> WorkingAsync(IWolverineRuntime runtime, RabbitMqTransport transport, CancellationToken cancellationToken) =>
+        BrokerHealthCheck.Connected(await transport.ProbeAsync(cancellationToken)) &&
+        Listeners(transport).All(endpoint => Accepting(runtime, endpoint));
 }
 
 /// <summary>
@@ -118,6 +118,16 @@ public sealed class BrokerHealthCheck(IWolverineRuntime runtime, IOptionsMonitor
 {
     public const string Name = "events-broker";
 
+    /// <summary>
+    /// True when the probe shows an open connection (T90). Wolverine (6.49) keeps its connection object during a
+    /// connect, and a probe meanwhile sees no closed connection, so it says "Healthy". A failed connect then removes
+    /// the object again. So a transport that never connected (no <see cref="BrokerHealthSnapshot.LastSuccessfulAt"/>)
+    /// has no connection, whatever the status says.
+    /// </summary>
+    public static bool Connected(BrokerHealthSnapshot probe) =>
+        probe.Status is not (BrokerHealthStatus.Unknown or BrokerHealthStatus.Unhealthy) &&
+        probe.LastSuccessfulAt != DateTimeOffset.MinValue;
+
     public async Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
     {
         if (FinanceBroker.Transport(runtime, options.CurrentValue) is not { } transport)
@@ -126,10 +136,11 @@ public sealed class BrokerHealthCheck(IWolverineRuntime runtime, IOptionsMonitor
         }
 
         var probe = await transport.ProbeAsync(cancellationToken);
-        if (probe.Status is BrokerHealthStatus.Unknown or BrokerHealthStatus.Unhealthy)
+        if (!Connected(probe))
         {
+            var state = probe.LastSuccessfulAt == DateTimeOffset.MinValue ? "never connected" : probe.Status.ToString();
             return HealthCheckResult.Degraded(
-                $"The host has no connection to the RabbitMQ broker ({probe.Status}). The finance events wait in the " +
+                $"The host has no connection to the RabbitMQ broker ({state}). The finance events wait in the " +
                 "finance outbox; the host connects again when the broker is back.");
         }
 

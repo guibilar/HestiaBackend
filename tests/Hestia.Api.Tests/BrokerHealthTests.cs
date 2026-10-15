@@ -6,6 +6,7 @@ using Hestia.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Logging;
+using Wolverine.Transports;
 
 namespace Hestia.Api.Tests;
 
@@ -38,6 +39,24 @@ public class BrokerHealthTests
 
         Assert.Equal(HealthStatus.Healthy, result.Status);
         Assert.Contains("does not use a broker", result.Description);
+    }
+
+    /// <summary>
+    /// T90: during a connect, Wolverine's probe says "Healthy" before the connect fails. A transport that never
+    /// connected has no connection, so the check says "no connection" and not "does not listen".
+    /// </summary>
+    [Theory]
+    [InlineData(BrokerHealthStatus.Healthy, false, false)]
+    [InlineData(BrokerHealthStatus.Healthy, true, true)]
+    [InlineData(BrokerHealthStatus.Degraded, true, true)]
+    [InlineData(BrokerHealthStatus.Unhealthy, true, false)]
+    [InlineData(BrokerHealthStatus.Unknown, false, false)]
+    public void Connected_NeedsAnOpenConnection_AndOneSuccessfulConnect(BrokerHealthStatus status, bool connectedOnce, bool expected)
+    {
+        var probe = new BrokerHealthSnapshot(new Uri("rabbitmq://localhost"), "RabbitMQ", status, null, null, 0,
+            connectedOnce ? DateTimeOffset.UtcNow : DateTimeOffset.MinValue);
+
+        Assert.Equal(expected, BrokerHealthCheck.Connected(probe));
     }
 
     [Fact]

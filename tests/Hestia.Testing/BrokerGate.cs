@@ -14,6 +14,8 @@ namespace Hestia.Testing;
 /// refuses connections to it, and no other listener can take it. The test projects run at the same time, with many
 /// local listeners (for example <see cref="FakeFinance"/>), so a released port can go to one of them, and the host then
 /// reaches an HTTP server in place of a broker that is down.
+/// The reservation must not use <c>SO_REUSEADDR</c> (T90): on Linux, two sockets with it can bind the same port while
+/// neither listens, so another listener (.NET sets the option on its listeners) could still take the port.
 /// </remarks>
 public sealed class BrokerGate : IAsyncDisposable
 {
@@ -31,7 +33,7 @@ public sealed class BrokerGate : IAsyncDisposable
     {
         _target = new Uri(target);
         // A free port, kept by a socket that does not listen: nothing listens on it until Open.
-        _reservation = Reserve(0);
+        _reservation = Reserve(0, reuse: false);
         _port = ((IPEndPoint)_reservation.LocalEndPoint!).Port;
         var address = new UriBuilder(_target) { Host = "127.0.0.1", Port = _port };
         Address = address.Uri.ToString();
@@ -73,22 +75,31 @@ public sealed class BrokerGate : IAsyncDisposable
         {
             try
             {
-                _reservation = Reserve(_port);
+                _reservation = Reserve(_port, reuse: false);
             }
             catch (SocketException)
             {
-                // The port is busy for a moment after the listener stops. The gate is closed anyway.
+                // The closed connections keep the port for a moment (TIME_WAIT). Only a reservation with
+                // SO_REUSEADDR can take it now; it keeps out listeners without the option.
+                try
+                {
+                    _reservation = Reserve(_port, reuse: true);
+                }
+                catch (SocketException)
+                {
+                    // The gate is closed anyway.
+                }
             }
         }
     }
 
     /// <summary>A socket bound to <paramref name="port"/> on loopback, without a listen: connections to it are refused.</summary>
-    private static Socket Reserve(int port)
+    private static Socket Reserve(int port, bool reuse)
     {
         var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
         try
         {
-            socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
+            socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, reuse);
             socket.Bind(new IPEndPoint(IPAddress.Loopback, port));
             return socket;
         }
