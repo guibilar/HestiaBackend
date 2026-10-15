@@ -7,8 +7,8 @@ namespace Hestia.Modules.Alerts.Application.Finance;
 /// <summary>
 /// Keeps the finance alerts current when finance changes (D7). Each finance event asks for a check of the finance
 /// source in the background (several events before the check starts give one check). <see cref="BudgetLimitReached"/>
-/// at the limit also raises its alert at once, from the event, so the alert is there even when the check cannot reach
-/// finance.
+/// also raises its alert at once, from the event (at the limit: "over its limit"; at 80 %: "nearly used up", T71), so
+/// the alert is there even when the check cannot reach finance.
 /// </summary>
 /// <remarks>
 /// Only the direct raise changes data, so only it uses the inbox of the Alerts module (T36). A request for a check needs
@@ -28,6 +28,13 @@ public sealed class FinanceAlertsConsumer(AlertsRunner runner)
             // The same "used" value as finance's PercentageUsed: the spending against the limit.
             var used = message.Limit > 0 ? message.Spent / message.Limit * 100 : message.Percent;
             var alert = FinanceAlertRules.BudgetOver(message.BudgetId, message.BudgetName, used, FinanceAlertRules.EventBudgetSortKey);
+            await runner.RaiseAsync(FinanceAlertSource.Info, alert, new AlertTrigger(message.EventId, InboxName), cancellationToken);
+        }
+        else if (message.Percent >= BudgetLimitReached.WarningPercent && message.Limit > 0)
+        {
+            var used = message.Spent / message.Limit * 100;
+            var alert = FinanceAlertRules.BudgetWarning(message.BudgetId, message.BudgetName, used,
+                message.Limit - message.Spent, FinanceAlertRules.EventBudgetWarningSortKey);
             await runner.RaiseAsync(FinanceAlertSource.Info, alert, new AlertTrigger(message.EventId, InboxName), cancellationToken);
         }
         _ = runner.RequestAsync(FinanceAlertSource.SourceName);

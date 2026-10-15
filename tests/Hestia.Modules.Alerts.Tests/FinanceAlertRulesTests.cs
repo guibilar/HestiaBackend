@@ -84,6 +84,31 @@ public sealed class FinanceAlertRulesTests
     }
 
     [Fact]
+    public void BudgetWarnings_From80Percent_UnderTheLimit_AfterTheBudgetsOver()
+    {
+        var items = FinanceAlertRules.Alerts(
+            Inputs(budgets: new BudgetPage
+            {
+                Items =
+                [
+                    new Budget(Guid.NewGuid(), "Fuel", 79.9m, 200m, 40.2m),
+                    new Budget(Guid.NewGuid(), "Groceries", 84m, 150m, 24m),
+                    new Budget(Guid.NewGuid(), "Dining", 100m, 500m, 0m),
+                    new Budget(Guid.NewGuid(), "Empty", 90m, 0m, 0m)
+                ]
+            }),
+            September5, Toronto).ToList();
+
+        Assert.Equal(new[] { ("budget-over", "Dining"), ("budget-warning", "Groceries") },
+            items.Select(item => (item.Kind, item.Values["budget"].Text!)));
+        var warning = items[1];
+        Assert.Equal((AlertValue.Percent(84m), AlertValue.Money(24m), AlertSeverity.Warning),
+            (warning.Values["used"], warning.Values["left"], warning.Severity));
+        Assert.StartsWith("money.budget-warning.", warning.Key);
+        Assert.Equal(items.Select(item => item.SortKey).Order(StringComparer.Ordinal), items.Select(item => item.SortKey));
+    }
+
+    [Fact]
     public void Alerts_SayWhenNothingWasImportedForMoreThanAWeek()
     {
         var accounts = new[] { NewAccount("Chequing", "Cibc", "2026-08-26T00:00:00Z", importedAt: "2026-08-27T15:00:00Z") };
@@ -136,7 +161,7 @@ public sealed class FinanceAlertRulesTests
             Inputs(new BudgetPage(), new UncategorisedReport(0), new RecurringReport(), []), September5, Toronto);
         Assert.True(all.Complete);
         Assert.Equal(
-            new[] { "money.budget-over.", "money.statements-not-imported", "money.statements-behind.", "money.price-changed.", "money.unsorted" },
+            new[] { "money.budget-over.", "money.budget-warning.", "money.statements-not-imported", "money.statements-behind.", "money.price-changed.", "money.unsorted" },
             all.Covered);
 
         var noAccounts = FinanceAlertRules.Check(

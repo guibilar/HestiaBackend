@@ -10,7 +10,9 @@ public sealed record BudgetPage
     public List<Budget> Items { get; init; } = [];
 }
 
-public sealed record Budget(Guid Id, string Name, decimal PercentageUsed);
+/// <param name="TotalAmount">The limit of the budget in its current period.</param>
+/// <param name="TotalRemaining">The limit less the spending (below zero when the spending is over the limit).</param>
+public sealed record Budget(Guid Id, string Name, decimal PercentageUsed, decimal TotalAmount = 0, decimal TotalRemaining = 0);
 
 /// <summary>The body of <c>POST /api/Budget/Filter</c>: all active budgets, as the web dashboard asks.</summary>
 public sealed record BudgetFilter(string Status, int Page, int PageSize)
