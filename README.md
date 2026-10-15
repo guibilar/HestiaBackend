@@ -23,6 +23,7 @@ src/
     Alerts/                         the "Needs attention" list of all modules: rules, store, /api/alerts (T15)
     Documents/                      documents: files on a volume, OCR, full-text search, expiry, links (T11)
     Home/                           rooms and the home inventory: values, warranties, links, CSV export (T22)
+    People/                         people: contacts, reach-out reminders, birthdays, gift ideas, loans, links (T20)
     Identity/                       sign-in: users, sessions, the read-only token, /api/Auth (T03)
     Tasks/                          to-dos and repeated home tasks: due dates, completions, links, alerts (T19)
     Today/                          the Today screen: /api/today, the cards of all modules (T08)
@@ -37,6 +38,7 @@ tests/
   Hestia.Modules.Alerts.Tests/
   Hestia.Modules.Documents.Tests/   with small sample files (Samples/) for the upload and OCR tests
   Hestia.Modules.Home.Tests/
+  Hestia.Modules.People.Tests/
   Hestia.Modules.Identity.Tests/
   Hestia.Modules.Sample.Tests/
   Hestia.Modules.Tasks.Tests/
@@ -636,6 +638,64 @@ Today tile in v1.
 
 **Backups.** The `home` schema is in the Hestia database, so the backup job (T24) dumps it. The CI backup check restores
 a home item with its room (`docker/ci/backup-restore-check.sh`).
+
+## People
+
+The People module (T20, schema `people`) is a small personal CRM: the people the user cares about, the contacts with
+them, a reach-out reminder, birthdays, gift ideas, and things lent or borrowed. A person links to documents, tasks, home
+items, and transactions.
+
+**Data.** A person has a name (required, at most 200 characters), a nickname, a relationship (free text, for example
+`Friend`), groups (as tags: lower case, `|a|b|`), a birthday (month and day, and the year when known), an email, a phone,
+notes, and a reach-out reminder in days (`contactEveryDays`, 1 to 3650). A contact (`interaction`) has a day, a kind
+(free text, for example `Call`), and a note; the latest contact is the person's `lastContactOn`. A gift idea has a title,
+notes, a price, an occasion, and `givenOn` (empty: still an idea). A loan has a thing, a direction (`Lent` or
+`Borrowed`), the day of the loan, a due day, and `returnedOn` (empty: open).
+
+**Reminder.** With `contactEveryDays`, `contactDueOn` is the last contact (or, without one, the day the person was added)
+plus the reminder; the person is `contactOverdue` after that day. **Birthdays:** February 29 is February 28 in other
+years; `nextBirthday` is today or later.
+
+**Endpoints** (prefix `/api/people`; a read-only user can call the GET endpoints only):
+
+| Endpoint | Description |
+| --- | --- |
+| `GET /summary` | `date`, `peopleCount`, `reachOut` (overdue reminders, most overdue first), `upcoming` (birthdays in the next 30 days: `date`, `days`, `age`, `giftIdeas`), `openLoans`, `overdueLoans`. |
+| `GET /groups` | The groups in use with `count`. |
+| `GET /?group=&q=&sort=name\|contact&page=1&pageSize=20` | A page of people. `q`: words in the name, nickname, relationship, groups, email, phone, notes. `sort=contact`: reach-out day first. |
+| `POST /`, `GET /{id}`, `PUT /{id}`, `DELETE /{id}` | A person (`PUT` replaces all details). `GET` has the latest 20 contacts, the gift ideas, the loans, and the links. |
+| `GET /{id}/interactions`, `POST /{id}/interactions`, `PUT /interactions/{id}`, `DELETE /interactions/{id}` | Contacts (`occurredOn`, default today; not in the future). |
+| `POST /{id}/gifts`, `PUT /gifts/{id}`, `DELETE /gifts/{id}` | Gift ideas. |
+| `GET /loans?status=open\|returned\|all`, `POST /{id}/loans`, `PUT /loans/{id}`, `DELETE /loans/{id}` | Loans of all people. |
+| `POST /{id}/links`, `DELETE /{id}/links/{linkId}`, `GET /by-link?kind=&id=` | Links: `Documents.Document`, `Money.Transaction`, `Tasks.Task`, `Home.Item`. |
+
+```bash
+curl -b cookies -H 'Content-Type: application/json' \
+  -d '{"name":"Marco Silva","groups":["Friends"],"birthday":{"month":11,"day":2},"contactEveryDays":42}' \
+  http://localhost:5097/api/people
+curl -b cookies -H 'Content-Type: application/json' -d '{"kind":"Coffee"}' http://localhost:5097/api/people/<id>/interactions
+```
+
+**Links.** The host checks the target with `IDocumentQueries`, `ITaskQueries`, `IHomeQueries`, or finance (as the
+signed-in user; finance down: 502). `PersonLinkCleanupConsumer` removes the links on `DocumentDeleted`, `TaskDeleted`,
+and `ItemDeleted`, with the inbox. Other modules do not link to people yet (T93).
+
+**Events (durable, T38).** `PersonAdded`, `PersonChanged` (`Details` or `Links`), `PersonDeleted`, `InteractionChanged`,
+`GiftChanged`, `LoanChanged` (`Change`: `Added`, `Changed`, `Deleted`), in `Hestia.Modules.People.Contracts`. Other
+modules read people with `IPeopleQueries`.
+
+**Alerts.** Source `People.Reminders`, all Neutral, link `/people/<id>`: `people.reach-out.<id>` (an overdue reminder),
+`people.birthday.<id>` (today or in the next 7 days; values `person`, `date`, `days`, and `age` when the year is known),
+and `people.loan-overdue.<loan id>` (an open loan after its due day). Each check looks at all people (a short list).
+`PeopleAlertsConsumer` asks for a check after the person, contact, and loan events. No Today tile in v1.
+
+| Setting (`People` section) | Default | Description |
+| --- | --- | --- |
+| `TimeZone` | `UTC` (appsettings: `America/Toronto`) | The IANA time zone of the days. Docker: `TZ`. |
+| `BirthdayAlertDays` | `7` | A birthday in these days is an alert. |
+| `UpcomingDays` | `30` | The birthdays in the summary. |
+
+**Backups.** The `people` schema is in the Hestia database. The CI backup check restores a person with a contact.
 
 ### OpenAPI document
 

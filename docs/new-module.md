@@ -257,7 +257,16 @@ modules. Today shows it, and the clients can poll it. The Documents module is th
   add `.Produces(200, contentType: "text/csv")` so the OpenAPI document shows the type. A GET endpoint is open to a
   read-only user.
 
-## 12. Check
+## 12. Tips from the People module (T20)
+
+- **Cascade deletes in tests:** the in-memory test database deletes only the child rows that the context tracks. When a
+  delete must remove child rows (for example the contacts of a person), load and remove them in the service, so both
+  databases give the same result.
+- **A small list:** when a module keeps few rows (some hundred), an alert source can check all of them and cover all its
+  prefixes, also for a check of one target. This is simpler than a check per target when a key does not hold the id of
+  the changed thing (for example a loan alert after a person event).
+
+## 13. Check
 
 - `dotnet build` has no warnings.
 - `dotnet test` passes, with the architecture tests.

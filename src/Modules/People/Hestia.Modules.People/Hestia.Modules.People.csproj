@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Internal: domain, application (people, contacts, gift ideas, loans, links, alerts), infrastructure, endpoints. Only
+       the host references this project. Other modules use Hestia.Modules.People.Contracts. -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Hestia.Platform\Hestia.Platform.csproj" />
+    <ProjectReference Include="..\Hestia.Modules.People.Contracts\Hestia.Modules.People.Contracts.csproj" />
+    <!-- The reminder alerts (IAlertSource, IAlertChecks; T15). Today shows them through the Alerts module. -->
+    <ProjectReference Include="..\..\Alerts\Hestia.Modules.Alerts.Contracts\Hestia.Modules.Alerts.Contracts.csproj" />
+    <!-- Links to documents, tasks, and home items: the existence checks, and the ...Deleted consumers. -->
+    <ProjectReference Include="..\..\Documents\Hestia.Modules.Documents.Contracts\Hestia.Modules.Documents.Contracts.csproj" />
+    <ProjectReference Include="..\..\Tasks\Hestia.Modules.Tasks.Contracts\Hestia.Modules.Tasks.Contracts.csproj" />
+    <ProjectReference Include="..\..\Home\Hestia.Modules.Home.Contracts\Hestia.Modules.Home.Contracts.csproj" />
+  </ItemGroup>
+
+</Project>
