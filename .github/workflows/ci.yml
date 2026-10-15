@@ -358,6 +358,15 @@ jobs:
             | jq -e '[.modules[] | select(.module == "Documents") | .hits[]] | length == 1'
           curl -sf -H "Cookie: $SESSION_COOKIE" 'http://localhost:5097/api/search?q=walking%20river&module=Journal' \
             | jq -e '.modules[0].total == 1'
+      # T18: the Inbox in the image: a note, the Today tile, and done.
+      - name: Inbox note, Today tile, and done
+        run: |
+          id=$(curl -sf -H "Cookie: $SESSION_COOKIE" -H 'Content-Type: application/json' -d '{"text":"CI call the plumber"}' \
+            http://localhost:5097/api/inbox | jq -r .id)
+          curl -sf -H "Cookie: $SESSION_COOKIE" 'http://localhost:5097/api/today?refresh=true' \
+            | jq -e '[.cards[] | select(.id == "inbox.open" and .value.number >= 1)] | length == 1'
+          curl -sf -X POST -H "Cookie: $SESSION_COOKIE" -H 'Content-Type: application/json' -d '{"sortedTo":"Task"}' \
+            "http://localhost:5097/api/inbox/$id/done" | jq -e '.sortedTo == "Task" and .doneAt != null'
       - name: A module event reaches its consumer after the commit (in process)
         run: |
           curl -sf -H "Cookie: $SESSION_COOKIE" -X POST -H 'Content-Type: application/json' -d '{"name":"CI kettle"}' \

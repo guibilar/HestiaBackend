@@ -806,6 +806,26 @@ The answer has `query`, `total` (all matches), and `modules` in order (Money fir
 
 A source that fails, or does not answer in `Search:SourceTimeout` (10 seconds), is `Failed`; the others still answer.
 
+
+## Inbox
+
+The Inbox module (T18, schema `inbox`) keeps quick notes to sort later: a thought, a link, a to-do. A note is open until
+the user sorts it. The clients sort a note into another module themselves (they add the task, or write the journal),
+then mark it done here with where it went (`sortedTo`, for example `Task`). Files go to Documents from Capture, as
+before. The module has no events.
+
+**Endpoints** (prefix `/api/inbox`; a read-only user can call the GET endpoints only):
+
+| Endpoint | Description |
+| --- | --- |
+| `GET /?done=false&q=&page=1&pageSize=50` | The open notes, newest first (`done=true`: the sorted ones, last sorted first). `q`: words in the text. |
+| `POST /`, `GET /{id}`, `PUT /{id}`, `DELETE /{id}` | A note: `{ "text": "…" }` (required, at most 4000 characters). |
+| `POST /{id}/done` | Sorted: `{ "sortedTo": "Task" }` (optional). A note sorted already keeps its first time and place. |
+| `POST /{id}/reopen` | Back with the open notes (an undo). |
+
+**Today.** The tile `inbox.open` (order 150): the count of open notes, "to sort" (Warning from 10 notes). Link `/inbox`.
+**Search.** The open notes are in `GET /api/search` (module `Inbox`, kind `note`, the first line as the title).
+
 ## OpenAPI document
 
 The host describes the module endpoints (not the finance paths) at `/openapi/v1.json`, with `/api/Auth/*`

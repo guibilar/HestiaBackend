@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Internal: domain, application (notes, Today tile, search), infrastructure, endpoints. Only the host references
+       this project. -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Hestia.Platform\Hestia.Platform.csproj" />
+    <ProjectReference Include="..\Hestia.Modules.Inbox.Contracts\Hestia.Modules.Inbox.Contracts.csproj" />
+    <!-- The Inbox tile on Today (ITodayCardProvider). -->
+    <ProjectReference Include="..\..\Today\Hestia.Modules.Today.Contracts\Hestia.Modules.Today.Contracts.csproj" />
+    <!-- The search of the notes (ISearchSource; T17). -->
+    <ProjectReference Include="..\..\Search\Hestia.Modules.Search.Contracts\Hestia.Modules.Search.Contracts.csproj" />
+  </ItemGroup>
+
+</Project>
