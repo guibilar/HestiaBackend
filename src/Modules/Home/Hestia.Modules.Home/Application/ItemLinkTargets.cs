@@ -47,7 +47,7 @@ public sealed class ItemLinkTargets(IDocumentQueries documents, ITaskQueries tas
         switch (linkKind)
         {
             case ItemLinkKinds.DocumentsDocument:
-                if (await documents.FindAsync(id, cancellationToken) is null)
+                if ((await documents.ListAsync([id], cancellationToken)).Count == 0)
                 {
                     throw new InvalidInputException("targetId", "No document has this id.");
                 }

@@ -403,6 +403,21 @@ public sealed class DocumentService(
             .ToListAsync(cancellationToken);
     }
 
+    /// <summary>The documents with these ids, without the OCR text (T89), newest first.</summary>
+    public async Task<IReadOnlyList<DocumentSummaryDto>> ListByIdsAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken)
+    {
+        if (ids.Count == 0)
+        {
+            return [];
+        }
+        return await db.Documents.AsNoTracking()
+            .Where(d => ids.Contains(d.Id))
+            .OrderByDescending(d => d.CreatedAt)
+            .ThenByDescending(d => d.Id)
+            .Select(Summary)
+            .ToListAsync(cancellationToken);
+    }
+
     internal static readonly Expression<Func<Document, DocumentSummaryDto>> Summary = d => new DocumentSummaryDto(
         d.Id, d.Title, d.Kind, DocumentTags.Read(d.Tags), d.IssuedOn, d.ExpiresOn, d.Notes, d.CreatedAt, d.UpdatedAt, d.OcrStatus,
         d.Files.OrderBy(f => f.Position)
@@ -436,4 +451,7 @@ public sealed class DocumentQueries(DocumentService documents) : IDocumentQuerie
             return [];
         }
     }
+
+    public Task<IReadOnlyList<DocumentSummaryDto>> ListAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken = default) =>
+        documents.ListByIdsAsync(ids, cancellationToken);
 }

@@ -47,7 +47,7 @@ public sealed class PersonLinkTargets(IDocumentQueries documents, ITaskQueries t
         var id = Guid.Parse(target);
         var exists = linkKind switch
         {
-            PersonLinkKinds.DocumentsDocument => await documents.FindAsync(id, cancellationToken) is not null,
+            PersonLinkKinds.DocumentsDocument => (await documents.ListAsync([id], cancellationToken)).Count > 0,
             PersonLinkKinds.TasksTask => await tasks.FindAsync(id, cancellationToken) is not null,
             PersonLinkKinds.HomeItem => await home.FindItemAsync(id, cancellationToken) is not null,
             // Finance has no "get one transaction" endpoint. The filter with the transaction id is a read-only query, and

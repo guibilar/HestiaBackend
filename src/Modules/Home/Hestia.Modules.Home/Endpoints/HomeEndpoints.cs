@@ -20,6 +20,14 @@ public static class HomeEndpoints
             .WithName("GetHomeSummary")
             .WithSummary("The item count, the total value, the count per room, and the warranties that end in the next 30 days.");
 
+        home.MapGet("/maintenance", (ItemService service, CancellationToken cancellationToken) => service.MaintenanceAsync(cancellationToken))
+            .WithName("ListHomeMaintenance")
+            .WithSummary("All maintenance: the open tasks linked to an item from either side, by due date (T89).");
+
+        home.MapGet("/categories", (ItemService service, CancellationToken cancellationToken) => service.CategoriesAsync(cancellationToken))
+            .WithName("ListHomeCategories")
+            .WithSummary("The categories in use, by name, with the count of items in each (T89).");
+
         MapRooms(home);
         MapItems(home);
     }

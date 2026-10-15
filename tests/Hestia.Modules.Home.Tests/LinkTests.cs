@@ -194,6 +194,12 @@ public class LinkTests
             new ItemTaskDto(filter.Id, "Change the furnace filter", "Open", HomeHost.Today.AddDays(20), 3, "Months", null)
         }, after.Maintenance);
 
+        // All maintenance (T89): the same tasks from both sides, with the item, by due date; "Not linked" is not there.
+        var all = await (await host.Client.GetAsync("/api/home/maintenance")).ReadAsync<List<MaintenanceDto>>();
+        Assert.Equal(new[] { (service.Id, item.Id), (filter.Id, item.Id) }, all.Select(m => (m.TaskId, m.ItemId)));
+        Assert.All(all, m => Assert.Equal(item.Name, m.ItemName));
+        Assert.Equal((3, "Months"), (all[1].RepeatEvery, all[1].RepeatUnit));
+
         // by-link finds the item from both sides too.
         async Task<Guid[]> ByLink(string kind, Guid id) =>
             (await (await host.Client.GetAsync($"{Items}/by-link?kind={kind}&id={id}")).ReadAsync<List<ItemSummaryDto>>()).Select(i => i.Id).ToArray();

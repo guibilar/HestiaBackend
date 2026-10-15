@@ -161,7 +161,11 @@ public class OutboxHealthTests
         var (exitCode, output) = await RunAsync(factory, arguments);
 
         Assert.Equal(1, exitCode);
-        Assert.Contains("documents, home, people, sample", output);
+        // Each durable schema by name (T89): a new durable module does not change this test.
+        foreach (var schema in new[] { "documents", "home", "people", "sample" })
+        {
+            Assert.Contains(schema, output);
+        }
     }
 
     private static async Task<HealthReportEntry> CheckAsync(HestiaApiFactory factory)

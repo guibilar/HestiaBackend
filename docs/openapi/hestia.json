@@ -507,6 +507,54 @@
         }
       }
     },
+    "/api/home/maintenance": {
+      "get": {
+        "tags": [
+          "Home"
+        ],
+        "summary": "All maintenance: the open tasks linked to an item from either side, by due date (T89).",
+        "operationId": "ListHomeMaintenance",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MaintenanceDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/home/categories": {
+      "get": {
+        "tags": [
+          "Home"
+        ],
+        "summary": "The categories in use, by name, with the count of items in each (T89).",
+        "operationId": "ListHomeCategories",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CategoryCountDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/home/rooms": {
       "get": {
         "tags": [
@@ -2612,6 +2660,26 @@
           }
         }
       },
+      "CategoryCountDto": {
+        "required": [
+          "name",
+          "count"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "count": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
       "ChangePasswordRequest": {
         "required": [
           "currentPassword",
@@ -4052,6 +4120,71 @@
           "rememberMe": {
             "type": "boolean",
             "default": false
+          }
+        }
+      },
+      "MaintenanceDto": {
+        "required": [
+          "taskId",
+          "title",
+          "dueOn",
+          "repeatEvery",
+          "repeatUnit",
+          "lastDoneAt",
+          "itemId",
+          "itemName",
+          "roomName"
+        ],
+        "type": "object",
+        "properties": {
+          "taskId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
+          },
+          "dueOn": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          },
+          "repeatEvery": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "repeatUnit": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lastDoneAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "itemId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "itemName": {
+            "type": "string"
+          },
+          "roomName": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },

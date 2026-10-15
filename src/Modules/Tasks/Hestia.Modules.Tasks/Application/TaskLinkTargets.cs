@@ -49,7 +49,7 @@ public sealed class TaskLinkTargets(IDocumentQueries documents, IHomeQueries hom
         var id = Guid.Parse(target);
         if (linkKind == TaskLinkKinds.DocumentsDocument)
         {
-            if (await documents.FindAsync(id, cancellationToken) is null)
+            if ((await documents.ListAsync([id], cancellationToken)).Count == 0)
             {
                 throw new InvalidInputException("targetId", "No document has this id.");
             }

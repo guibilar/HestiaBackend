@@ -16,6 +16,21 @@ public class ItemApiTests
     private static readonly DateOnly Today = HomeHost.Today;
 
     [Fact]
+    public async Task Categories_ListsTheCategoriesInUse_WithTheirCounts()
+    {
+        await using var host = HomeHost.Start();
+        Assert.Empty(await (await host.Client.GetAsync("/api/home/categories")).ReadAsync<List<CategoryCountDto>>());
+        await host.CreateAsync(new CreateItemRequest("Dishwasher", Category: "Appliance"));
+        await host.CreateAsync(new CreateItemRequest("Fridge", Category: "Appliance"));
+        await host.CreateAsync(new CreateItemRequest("Sofa", Category: "Furniture"));
+        await host.CreateAsync(new CreateItemRequest("Box of cables"));
+
+        var categories = await (await host.Client.GetAsync("/api/home/categories")).ReadAsync<List<CategoryCountDto>>();
+
+        Assert.Equal(new[] { new CategoryCountDto("Appliance", 2), new CategoryCountDto("Furniture", 1) }, categories);
+    }
+
+    [Fact]
     public async Task Create_StoresAllDetails_AndRaisesItemAdded()
     {
         await using var host = HomeHost.Start();
