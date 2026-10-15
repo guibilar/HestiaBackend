@@ -22,11 +22,15 @@ namespace Hestia.Testing;
 /// on the PostgreSQL server that <see cref="TestDatabase"/> picked, migrated by the host on start (as in Docker).
 /// Requests are signed in as <see cref="TestSignIn"/> unless <paramref name="signedIn"/> is false: then the real
 /// sign-in of the Identity module is in charge. The gateway signing key is <see cref="TestGatewayKey"/>.
+/// <para>By default, a test consumer records every event (<see cref="Events"/>), and Wolverine compiles the handlers at
+/// run time (they include the test consumer). With <paramref name="recordEvents"/> false, the host has the consumers of
+/// the real host only, and loads the pre-generated handler code (T39).</para>
 /// </summary>
 public class HestiaApiFactory(
     IReadOnlyDictionary<string, string?>? settings = null,
     Action<IServiceCollection>? configureServices = null,
-    bool signedIn = true) : WebApplicationFactory<Program>
+    bool signedIn = true,
+    bool recordEvents = true) : WebApplicationFactory<Program>
 {
     private readonly string _databaseName = $"hestia_test_{Guid.NewGuid():N}";
     private readonly InMemoryDatabaseRoot _inMemoryRoot = new();
@@ -94,8 +98,11 @@ public class HestiaApiFactory(
 
         builder.ConfigureTestServices(services =>
         {
-            services.AddSingleton<EventRecorder>();
-            services.AddSingleton<IWolverineExtension>(new RecordEvents(HestiaEvents.EventTypes(ModuleLoader.Discover())));
+            if (recordEvents)
+            {
+                services.AddSingleton<EventRecorder>();
+                services.AddSingleton<IWolverineExtension>(new RecordEvents(HestiaEvents.EventTypes(ModuleLoader.Discover())));
+            }
             if (TestDatabase.PostgresServer is null)
             {
                 services.RemoveAll<IDatabaseOptionsConfigurator>();

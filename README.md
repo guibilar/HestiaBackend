@@ -911,6 +911,24 @@ Settings (section `Events`):
 The broker runs in the finance project (its `events` profile), on the network `finance`. Until a module consumes a
 finance event, the host takes it from the queue and drops it (or logs it, with `LogAll`).
 
+### Pre-generated handler code (T39)
+
+Wolverine makes C# code for each event handler (all consumers of one event type). The host loads this code compiled
+into `Hestia.Api` (`src/Hestia.Api/Internal/Generated`, Wolverine `TypeLoadMode.Auto`), so it does not compile a handler
+with Roslyn at the first event of each type. A handler without pre-generated code is still compiled at run time.
+
+After you add or change a consumer, update the files and commit them. `GeneratedHandlerCodeTests` fails in CI when they
+are not current:
+
+```bash
+cd tests/Hestia.Api.Tests
+HESTIA_UPDATE_HANDLER_CODE=1 dotnet run -- -class "*GeneratedHandlerCodeTests*"
+git add ../../src/Hestia.Api/Internal/Generated
+```
+
+Test hosts add a recording consumer to every event (`HestiaApiFactory.Events`), so they compile their handlers at run
+time (`TypeLoadMode.Dynamic`). `new HestiaApiFactory(recordEvents: false)` is a host with the real consumers only.
+
 ### Event health (T37)
 
 **The broker is down when the host starts.** The host waits `Broker:StartTimeout` (5 seconds) for the broker, then

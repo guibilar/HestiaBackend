@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using JasperFx.CodeGeneration;
 using Wolverine;
 
 namespace Hestia.Testing;
@@ -61,11 +62,14 @@ public sealed class RecordingConsumer<TEvent>(EventRecorder recorder) where TEve
 /// Adds a <see cref="RecordingConsumer{TEvent}"/> for each event type to the host's Wolverine setup.
 /// <see cref="HestiaApiFactory"/> adds it to every test host, for every event type, so a test needs no setup to see the
 /// events, and all test hosts have the same consumers.
+/// <para>The handlers then differ from the pre-generated code of the real host (T39), so Wolverine compiles them at run
+/// time (<see cref="TypeLoadMode.Dynamic"/>). Otherwise it would load the pre-generated types, without the recorder.</para>
 /// </summary>
 public sealed class RecordEvents(IReadOnlyList<Type> eventTypes) : IWolverineExtension
 {
     public void Configure(WolverineOptions options)
     {
+        options.CodeGeneration.TypeLoadMode = TypeLoadMode.Dynamic;
         foreach (var eventType in eventTypes)
         {
             options.Discovery.IncludeType(typeof(RecordingConsumer<>).MakeGenericType(eventType));

@@ -8,6 +8,7 @@ using Hestia.Platform.Health;
 using Hestia.Platform.Modules;
 using Hestia.Platform.Persistence;
 using JasperFx;
+using JasperFx.CodeGeneration;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
@@ -145,6 +146,10 @@ internal sealed class HestiaEventsSetup(
         {
             wolverine.CodeGeneration.AlwaysUseServiceLocationFor(database.ContextType);
         }
+
+        // T39: load the pre-generated handler types (Internal/Generated, "codegen write"). A handler without a
+        // pre-generated type (a test consumer, or code not written yet) is still compiled at its first message.
+        wolverine.CodeGeneration.TypeLoadMode = TypeLoadMode.Auto;
 
         ConsumerRetries.Apply(wolverine);
 
