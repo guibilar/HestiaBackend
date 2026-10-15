@@ -11,15 +11,13 @@ namespace Hestia.Api.Tests;
 /// <c>AlwaysUseServiceLocationFor</c>) fails only then, and the message goes to the error queue. This test compiles all
 /// handlers in CI instead.
 /// </summary>
-public class HandlerCompileTests
+[Collection(StartedHostCollection.Name)]
+public class HandlerCompileTests(StartedHost host)
 {
     [Fact]
-    public async Task EveryHandler_Compiles()
+    public void EveryHandler_Compiles()
     {
-        await using var factory = new HestiaApiFactory();
-        factory.CreateClient();
-
-        var (count, problems) = HandlerCompileCheck.Run(factory.Services);
+        var (count, problems) = HandlerCompileCheck.Run(host.Services);
 
         if (problems.Count > 0)
         {
