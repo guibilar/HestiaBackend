@@ -211,8 +211,21 @@ echo "GATEWAY_PUBLIC_KEY=$(openssl pkey -in gateway.key -pubout -outform DER | b
 rm gateway.key
 ```
 
-The host does not start without a valid signing key. To change the key, make a new pair, and set both values. Then
-restart both services.
+The host does not start without a valid signing key. Each token has the key id (`kid`, the RFC 7638 thumbprint of the
+public key) in its header.
+
+#### Change the gateway key (T43)
+
+Change the key when it was perhaps seen by someone, or as routine. Finance can accept two public keys at the same time
+(`GATEWAY_PUBLIC_KEY` and `GATEWAY_NEXT_PUBLIC_KEY`), so no request fails during the change.
+
+1. Make a new pair: `docker compose run --rm -T hestia-api gateway-key new`. It prints the new values and these steps.
+2. In the finance `.env`, set `GATEWAY_NEXT_PUBLIC_KEY` to the new public key. Then `docker compose up -d` in the
+   finance folder. Finance now accepts both keys (its start log names both key ids).
+3. In the Hestia `.env`, set `GATEWAY_SIGNING_KEY` to the new private key. Then `docker compose up -d hestia-api`.
+4. In the finance `.env`, move the new public key to `GATEWAY_PUBLIC_KEY`, and make `GATEWAY_NEXT_PUBLIC_KEY` empty.
+   Then `docker compose up -d` in the finance folder. Finance now refuses the old key.
+5. Check: `docker compose run --rm -T hestia-api gateway-key` shows the new key id, and the Money pages load.
 
 ### The shared finance client
 

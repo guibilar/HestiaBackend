@@ -107,6 +107,53 @@ public class GatewayTokenTests
     }
 
     [Fact]
+    public void Token_HasTheKeyId_TheJwkThumbprintOfThePublicKey()
+    {
+        using var tokens = new GatewayTokens(Options.Create(new FinanceProxyOptions { SigningKey = TestGatewayKey.SigningKey }), TimeProvider.System);
+        var user = new System.Security.Claims.ClaimsPrincipal(new System.Security.Claims.ClaimsIdentity(
+            [new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.NameIdentifier, "u1")], "Test"));
+
+        var token = new Microsoft.IdentityModel.JsonWebTokens.JsonWebToken(tokens.Create(user));
+
+        // The same id as the standard library computes (RFC 7638): finance can compute it from its public key.
+        var jwk = Microsoft.IdentityModel.Tokens.JsonWebKeyConverter.ConvertFromECDsaSecurityKey(
+            new Microsoft.IdentityModel.Tokens.ECDsaSecurityKey(TestGatewayKey.PublicKey()));
+        var thumbprint = Microsoft.IdentityModel.Tokens.Base64UrlEncoder.Encode(jwk.ComputeJwkThumbprint());
+        Assert.Equal((thumbprint, "ES256", "JWT"), (token.Kid, token.Alg, token.Typ));
+        Assert.Equal(thumbprint, tokens.KeyId);
+        using var other = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        Assert.NotEqual(thumbprint, GatewaySigningKey.KeyId(other));
+    }
+
+    [Fact]
+    public async Task GatewayKeyCommand_ShowsTheKeyInUse_AndMakesANewPair()
+    {
+        await using var finance = await FakeFinance.StartAsync();
+        await using var host = new HestiaApiFactory(finance.HostSettings());
+        var command = host.Services.GetServices<Hestia.Platform.Modules.IModuleCommand>().Single(c => c.Name == "gateway-key");
+        using var currentKey = GatewaySigningKey.Load(TestGatewayKey.SigningKey);
+        var keyId = GatewaySigningKey.KeyId(currentKey);
+
+        var shown = new StringWriter();
+        Assert.Equal(0, await command.RunAsync(host.Services, [], TextReader.Null, shown, CancellationToken.None));
+        Assert.Contains($"Key id: {keyId}", shown.ToString());
+        Assert.Contains($"GATEWAY_PUBLIC_KEY={Convert.ToBase64String(currentKey.ExportSubjectPublicKeyInfo())}", shown.ToString());
+
+        var made = new StringWriter();
+        Assert.Equal(0, await command.RunAsync(host.Services, ["new"], TextReader.Null, made, CancellationToken.None));
+        var lines = made.ToString().Split('\n', StringSplitOptions.TrimEntries);
+        var signing = lines.Single(line => line.StartsWith("GATEWAY_SIGNING_KEY=", StringComparison.Ordinal))["GATEWAY_SIGNING_KEY=".Length..];
+        var next = lines.Single(line => line.StartsWith("GATEWAY_NEXT_PUBLIC_KEY=", StringComparison.Ordinal))["GATEWAY_NEXT_PUBLIC_KEY=".Length..];
+        using var newKey = GatewaySigningKey.Load(signing);
+        // The new public key belongs to the new private key, and it is a new key.
+        Assert.Equal(Convert.ToBase64String(newKey.ExportSubjectPublicKeyInfo()), next);
+        Assert.NotEqual(keyId, GatewaySigningKey.KeyId(newKey));
+        Assert.Contains($"New key:    {GatewaySigningKey.KeyId(newKey)}", made.ToString());
+
+        Assert.Equal(1, await command.RunAsync(host.Services, ["old"], TextReader.Null, new StringWriter(), CancellationToken.None));
+    }
+
+    [Fact]
     public void Token_IsOnlyForASignedInUser()
     {
         using var tokens = new GatewayTokens(Options.Create(new FinanceProxyOptions { SigningKey = TestGatewayKey.SigningKey }), TimeProvider.System);
