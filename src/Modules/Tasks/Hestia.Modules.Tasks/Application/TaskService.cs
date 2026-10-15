@@ -12,7 +12,7 @@ namespace Hestia.Modules.Tasks.Application;
 /// <summary>The filters of the task list.</summary>
 /// <param name="Status">Open or Done, or null for both.</param>
 /// <param name="Tag">One tag, or null.</param>
-/// <param name="Due"><c>today</c>, <c>overdue</c>, <c>upcoming</c>, or <c>none</c>, or null for all.</param>
+/// <param name="Due"><c>today</c>, <c>overdue</c>, <c>upcoming</c>, <c>later</c>, or <c>none</c>, or null for all.</param>
 /// <param name="Text">Words that must be in the title, the notes, or the tags.</param>
 /// <param name="Page">The page, from 1.</param>
 /// <param name="PageSize">The page size, 1 to 100.</param>
@@ -76,7 +76,8 @@ public sealed class TaskService(
         PagingExtensions.Validate(query.Page, query.PageSize);
         IQueryable<TaskItem> tasks = db.Tasks.AsNoTracking();
 
-        if (ParseStatus(query.Status) is { } status)
+        var listStatus = ParseStatus(query.Status);
+        if (listStatus is { } status)
         {
             tasks = tasks.Where(t => t.Status == status);
         }
@@ -105,7 +106,9 @@ public sealed class TaskService(
         }
 
         var total = await tasks.CountAsync(cancellationToken);
-        var items = await SummariesAsync(InListOrder(tasks).Skip((query.Page - 1) * query.PageSize).Take(query.PageSize), cancellationToken);
+        // The done tasks: the last one done first (T86). The other lists: by due date.
+        var ordered = listStatus == TaskItemStatus.Done ? InDoneOrder(tasks) : InListOrder(tasks);
+        var items = await SummariesAsync(ordered.Skip((query.Page - 1) * query.PageSize).Take(query.PageSize), cancellationToken);
         return new PaginatedList<TaskSummaryDto> { Items = items, Page = query.Page, PageSize = query.PageSize, TotalCount = total };
     }
 
@@ -117,6 +120,24 @@ public sealed class TaskService(
         .ThenBy(t => t.SortOrder)
         .ThenBy(t => t.CreatedAt)
         .ThenBy(t => t.Id);
+
+    /// <summary>The order of the done tasks (T86): the last one done first, then the newest first.</summary>
+    private static IQueryable<TaskItem> InDoneOrder(IQueryable<TaskItem> tasks) => tasks
+        .OrderByDescending(t => t.DoneAt)
+        .ThenByDescending(t => t.CreatedAt)
+        .ThenByDescending(t => t.Id);
+
+    /// <summary>The tags in use (T86), by name, with the count of tasks (open and done) that have each one.</summary>
+    public async Task<List<TagCountDto>> TagsAsync(CancellationToken cancellationToken)
+    {
+        var stored = await db.Tasks.AsNoTracking().Where(t => t.Tags != "").Select(t => t.Tags).ToListAsync(cancellationToken);
+        return stored
+            .SelectMany(TaskTags.Read)
+            .GroupBy(tag => tag)
+            .Select(group => new TagCountDto(group.Key, group.Count()))
+            .OrderBy(tag => tag.Name, StringComparer.Ordinal)
+            .ToList();
+    }
 
     private IQueryable<TaskItem> FilterByDue(IQueryable<TaskItem> tasks, string? due)
     {
@@ -132,8 +153,10 @@ public sealed class TaskService(
             // A done task is not late.
             "overdue" => tasks.Where(t => t.Status == TaskItemStatus.Open && t.DueOn < today),
             "upcoming" => tasks.Where(t => t.DueOn > today && t.DueOn <= last),
+            // After the upcoming days (T86).
+            "later" => tasks.Where(t => t.DueOn > last),
             "none" => tasks.Where(t => t.DueOn == null),
-            _ => throw new InvalidInputException("due", "Use due=today, overdue, upcoming, or none.")
+            _ => throw new InvalidInputException("due", "Use due=today, overdue, upcoming, later, or none.")
         };
     }
 

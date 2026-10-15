@@ -155,6 +155,9 @@ public sealed record CreateTaskLinkRequest(string? Kind, string? TargetId);
 /// <param name="Upcoming">Open tasks due after today, in the next 7 days (<c>Tasks:UpcomingDays</c>).</param>
 public sealed record TaskCountsDto(DateOnly Date, int DueToday, int Overdue, int Upcoming);
 
+/// <summary>A tag in use and how many tasks (open and done) have it (<c>GET /api/tasks/tags</c>, T86).</summary>
+public sealed record TagCountDto(string Name, int Count);
+
 /// <summary>The kinds of link that the Tasks module knows.</summary>
 public static class TaskLinkKinds
 {
