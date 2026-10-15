@@ -142,7 +142,7 @@ public class BrokerHealthTests
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            Assert.Fail($"The host did not receive the event. {Log(logs)}");
+            Assert.Fail($"The host did not receive the event. {await StateAsync(factory)} {Log(logs)}");
         }
     }
 
@@ -154,12 +154,33 @@ public class BrokerHealthTests
     }
 
     /// <summary>The log lines about the broker, for a failure message (CI shows only the message).</summary>
+    /// <summary>
+    /// The last lines about the broker, with their time. Not the lines of the health checks: the test runs them in a loop,
+    /// and they hid the lines of the reconnect in CI (T95).
+    /// </summary>
     private static string Log(LogCapture logs) => "Log: " + string.Join(" | ", logs.Lines
-        .Where(line => line.Level >= LogLevel.Information &&
+        .Where(line => line.Level >= LogLevel.Information && !line.Category.Contains("HealthCheck", StringComparison.Ordinal) &&
                        (line.Category.Contains("Rabbit", StringComparison.Ordinal) || line.Message.Contains("Events:", StringComparison.Ordinal) ||
                         line.Message.Contains("broker", StringComparison.OrdinalIgnoreCase) || line.Message.Contains("listen", StringComparison.OrdinalIgnoreCase)))
         .TakeLast(12)
-        .Select(line => $"{line.Level} {line.Category}: {Short(line.Message)}"));
+        .Select(line => $"{line.At:HH:mm:ss.fff} {line.Level} {line.Category.Split('.')[^1]}: {Short(line.Message)}"));
+
+    /// <summary>The broker probe and the state of each listener now, for a failed test (T95).</summary>
+    private static async Task<string> StateAsync(HestiaApiFactory factory)
+    {
+        try
+        {
+            var runtime = factory.Services.GetRequiredService<Wolverine.Runtime.IWolverineRuntime>();
+            var transport = runtime.Options.Transports.OfType<Wolverine.RabbitMQ.Internal.RabbitMqTransport>().Single();
+            var probe = await transport.ProbeAsync(CancellationToken.None);
+            var listeners = string.Join(", ", runtime.Endpoints.ActiveListeners().Select(l => $"{l.Uri} {l.Status}"));
+            return $"At {DateTimeOffset.UtcNow:HH:mm:ss.fff}: probe {probe.Status} (last success {probe.LastSuccessfulAt:HH:mm:ss}); listeners: {listeners}.";
+        }
+        catch (Exception ex)
+        {
+            return $"State unknown: {ex.GetType().Name}.";
+        }
+    }
 
     private static string Short(string text) => text.Length > 200 ? text[..200] : text;
 
