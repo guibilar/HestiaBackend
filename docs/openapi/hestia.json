@@ -2727,6 +2727,58 @@
           }
         }
       }
+    },
+    "/api/timeline": {
+      "get": {
+        "tags": [
+          "Timeline"
+        ],
+        "summary": "What happened in all modules, day by day, newest first: one page of days.",
+        "description": "before: the page ends the day before it (none: the page ends today; the next page uses the answer's earlier). days: 1 to 31 (7). module: only one module, for example Money.",
+        "operationId": "GetTimeline",
+        "parameters": [
+          {
+            "name": "before",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "module",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "days",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 7
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TimelineDto"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -5846,6 +5898,148 @@
           }
         }
       },
+      "TimelineDayDto": {
+        "required": [
+          "day",
+          "entries"
+        ],
+        "type": "object",
+        "properties": {
+          "day": {
+            "type": "string",
+            "format": "date"
+          },
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TimelineEntry"
+            }
+          }
+        }
+      },
+      "TimelineDto": {
+        "required": [
+          "today",
+          "from",
+          "to",
+          "earlier",
+          "days",
+          "modules"
+        ],
+        "type": "object",
+        "properties": {
+          "today": {
+            "type": "string",
+            "format": "date"
+          },
+          "from": {
+            "type": "string",
+            "format": "date"
+          },
+          "to": {
+            "type": "string",
+            "format": "date"
+          },
+          "earlier": {
+            "type": "string",
+            "format": "date"
+          },
+          "days": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TimelineDayDto"
+            }
+          },
+          "modules": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TimelineModuleDto"
+            }
+          }
+        }
+      },
+      "TimelineEntry": {
+        "required": [
+          "id",
+          "module",
+          "kind",
+          "day",
+          "at",
+          "title",
+          "text",
+          "amount",
+          "link"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "module": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "day": {
+            "type": "string",
+            "format": "date"
+          },
+          "at": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "title": {
+            "type": "string"
+          },
+          "text": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "amount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "link": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "TimelineModuleDto": {
+        "required": [
+          "module",
+          "status"
+        ],
+        "type": "object",
+        "properties": {
+          "module": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/TimelineModuleStatus"
+          }
+        }
+      },
+      "TimelineModuleStatus": {
+        "enum": [
+          "Complete",
+          "Partial",
+          "Failed"
+        ]
+      },
       "TodayCard": {
         "required": [
           "id",
@@ -6423,6 +6617,9 @@
     },
     {
       "name": "Tasks"
+    },
+    {
+      "name": "Timeline"
     }
   ]
 }

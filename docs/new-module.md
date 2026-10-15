@@ -169,6 +169,19 @@ from a Today provider. A "Needs attention" item is an alert: see step 8.
    modules. If only a part of your data loads, return the cards that you have with `Complete: false`.
 6. Test it through `GET /api/today` with `HestiaApiFactory`.
 
+## 7b. Timeline entries (when the module has them)
+
+The Timeline (T16) shows what happened in all modules, day by day. A module adds its entries with a source:
+
+1. In the internal `.csproj`, add a `ProjectReference` to `Hestia.Modules.Timeline.Contracts`.
+2. Add a class that implements `ITimelineSource`: `Module` is your module name; `ListAsync(range)` reads your own tables
+   for the days of `range` and returns `TimelineEntry` items. Start each `Id` with the lower-case module name, the kind,
+   and the id (`documents.document-added.<id>`). `Link` is the web route of the thing.
+3. Compare times with `range.Start` and `range.End` (UTC moments: PostgreSQL takes only UTC), and days with `range.From`
+   and `range.To`. Give each entry its local day with `range.DayOf(moment)`.
+4. Register it in `AddServices`: `services.AddScoped<ITimelineSource, DocumentTimeline>();`. Example: `DocumentTimeline`.
+5. Test it through `GET /api/timeline` (see `tests/Hestia.Modules.Timeline.Tests`).
+
 ## 8. "Needs attention" items: alerts (when the module has them)
 
 The Alerts module (T15, see the README, section "Alerts") keeps one list of the things that need attention, from all

@@ -345,6 +345,12 @@ jobs:
           curl -sf -H "Cookie: $SESSION_COOKIE" http://localhost:5097/api/journal/summary | tee /dev/stderr \
             | jq -e '.streak == 1 and .today.text == "CI walked along the rivers" and .week[6].written'
           curl -sf -H "Cookie: $SESSION_COOKIE" 'http://localhost:5097/api/journal/entries?q=walking%20river' | jq -e '.totalCount == 1'
+      # T16: the Timeline in the image: today's journal entry (the step above) is on it, from PostgreSQL.
+      - name: Timeline
+        run: |
+          curl -sf -H "Cookie: $SESSION_COOKIE" 'http://localhost:5097/api/timeline?days=7' | tee /dev/stderr \
+            | jq -e '[.days[].entries[] | select(.module == "Journal" and .text == "CI walked along the rivers")] | length == 1'
+          curl -sf -H "Cookie: $SESSION_COOKIE" 'http://localhost:5097/api/timeline?module=Documents&days=31' | jq -e '[.days[].entries[]] | length >= 1'
       - name: A module event reaches its consumer after the commit (in process)
         run: |
           curl -sf -H "Cookie: $SESSION_COOKIE" -X POST -H 'Content-Type: application/json' -d '{"name":"CI kettle"}' \

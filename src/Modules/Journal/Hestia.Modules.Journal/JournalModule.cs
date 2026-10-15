@@ -2,6 +2,7 @@ using Hestia.Modules.Journal.Application;
 using Hestia.Modules.Journal.Contracts;
 using Hestia.Modules.Journal.Endpoints;
 using Hestia.Modules.Journal.Infrastructure;
+using Hestia.Modules.Timeline.Contracts;
 using Hestia.Modules.Today.Contracts;
 using Hestia.Platform.Hosting;
 using Hestia.Platform.Modules;
@@ -46,6 +47,8 @@ public static class JournalModuleExtensions
         // Reads only the Journal tables.
         services.AddScoped<IJournalQueries, JournalQueries>();
         services.AddScoped<ITodayCardProvider, JournalTodayCards>();
+        // The Timeline entries (T16).
+        services.AddScoped<ITimelineSource, JournalTimeline>();
         return services;
     }
 

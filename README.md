@@ -763,6 +763,33 @@ curl -b cookies http://localhost:5097/api/journal/summary
 **Today.** The tile `journal.streak` (module `Journal`, order 140): the streak as a count, "Not written today" until today
 has an entry, and Good when it has one. Link `/journal`.
 
+
+## Timeline
+
+The Timeline module (T16) shows what happened in all modules, day by day, newest first. It keeps no data of its own:
+each module gives its entries for a range of days through `ITimelineSource` (`Hestia.Modules.Timeline.Contracts`), from
+its own tables, so a deleted thing goes from the Timeline at once, and old data shows from the start.
+
+| Module | Entries (kind) |
+| --- | --- |
+| Money | Each transaction (`transaction`, the category and the account; a day without a time), and "&lt;Month&gt; in review" on the first day of each month (`month-review`, T82: the purchases, the days without spending, and the spending as the amount). Read from finance as the signed-in user. |
+| Documents | Each document added (`document-added`, its kind). |
+| Tasks | Each time a task was done (`task-done`). |
+| Home | Each item added (`item-added`, its room). |
+| People | Contacts (`contact`), things lent or borrowed (`loan`), gifts given (`gift-given`), and people added (`person-added`). |
+| Journal | The entry of each day (`entry`, its excerpt). |
+
+**Endpoint** (it only reads, so a read-only user can call it): `GET /api/timeline?before=&days=7&module=`. The page ends
+the day before `before` (none: today), and has `days` days (1 to 31). The answer has `today`, `from`, `to`, `earlier`
+(the `before` of the next page), `days` (only the days with entries, newest first; in a day, the entries with a time
+newest first, then the entries of the whole day), and `modules` (each module's status on the page: `Complete`,
+`Partial`, or `Failed`). An entry has `id`, `module`, `kind`, `day`, `at` (or null), `title`, `text`, `amount` (money in
+is positive), and `link` (the web route of the thing).
+
+A source that fails, or does not answer in `Timeline:SourceTimeout` (10 seconds), gives no entries, and its module is
+`Failed`; the others still show. Finance down: Money is `Failed`. A month review that does not load makes Money
+`Partial`.
+
 ## OpenAPI document
 
 The host describes the module endpoints (not the finance paths) at `/openapi/v1.json`, with `/api/Auth/*`

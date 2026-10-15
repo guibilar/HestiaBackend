@@ -21,6 +21,8 @@
     <ProjectReference Include="..\..\Home\Hestia.Modules.Home.Contracts\Hestia.Modules.Home.Contracts.csproj" />
     <!-- Links to people (T93): the existence check (IPeopleQueries) and the PersonDeleted consumer. -->
     <ProjectReference Include="..\..\People\Hestia.Modules.People.Contracts\Hestia.Modules.People.Contracts.csproj" />
+    <!-- The Timeline entries of the module (ITimelineSource; T16). -->
+    <ProjectReference Include="..\..\Timeline\Hestia.Modules.Timeline.Contracts\Hestia.Modules.Timeline.Contracts.csproj" />
   </ItemGroup>
 
 </Project>

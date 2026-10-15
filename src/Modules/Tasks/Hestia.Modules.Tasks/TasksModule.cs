@@ -3,6 +3,7 @@ using Hestia.Modules.Tasks.Application;
 using Hestia.Modules.Tasks.Contracts;
 using Hestia.Modules.Tasks.Endpoints;
 using Hestia.Modules.Tasks.Infrastructure;
+using Hestia.Modules.Timeline.Contracts;
 using Hestia.Modules.Today.Contracts;
 using Hestia.Platform.Hosting;
 using Hestia.Platform.Modules;
@@ -51,6 +52,8 @@ public static class TasksModuleExtensions
         // task event, TaskAlertsConsumer asks for a check (Wolverine finds it; it needs no registration).
         services.AddScoped<ITodayCardProvider, TasksTodayCards>();
         services.AddScoped<IAlertSource, TaskDueAlerts>();
+        // The Timeline entries (T16).
+        services.AddScoped<ITimelineSource, TaskTimeline>();
         return services;
     }
 

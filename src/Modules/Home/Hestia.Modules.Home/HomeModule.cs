@@ -3,6 +3,7 @@ using Hestia.Modules.Home.Application;
 using Hestia.Modules.Home.Contracts;
 using Hestia.Modules.Home.Endpoints;
 using Hestia.Modules.Home.Infrastructure;
+using Hestia.Modules.Timeline.Contracts;
 using Hestia.Platform.Hosting;
 using Hestia.Platform.Modules;
 using Hestia.Platform.Persistence;
@@ -54,6 +55,8 @@ public static class HomeModuleExtensions
         // The warranty alerts (T15): the Alerts module runs them, and Today shows them. After an item event,
         // HomeAlertsConsumer asks for a check (Wolverine finds it; it needs no registration).
         services.AddScoped<IAlertSource, WarrantyAlerts>();
+        // The Timeline entries (T16).
+        services.AddScoped<ITimelineSource, HomeTimeline>();
         return services;
     }
 
