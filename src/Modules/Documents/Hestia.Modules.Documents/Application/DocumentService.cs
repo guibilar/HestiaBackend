@@ -403,6 +403,41 @@ public sealed class DocumentService(
             .ToListAsync(cancellationToken);
     }
 
+    /// <summary>The most target ids of one count request (T72).</summary>
+    public const int MaxCountTargets = 200;
+
+    /// <summary>
+    /// How many documents link to each target (T72): every requested id (in its stored form) with its count, 0 included.
+    /// </summary>
+    /// <exception cref="InvalidInputException">An unknown kind, an id that this kind cannot have, or too many ids.</exception>
+    public async Task<Dictionary<string, int>> CountByLinkAsync(DocumentLinkCountsRequest request, CancellationToken cancellationToken)
+    {
+        var ids = request.TargetIds ?? [];
+        if (ids.Count > MaxCountTargets)
+        {
+            throw new InvalidInputException("targetIds", $"Ask for at most {MaxCountTargets} ids at once.");
+        }
+        var targets = new List<string>();
+        string? kind = null;
+        foreach (var id in ids)
+        {
+            (kind, var target) = LinkTargets.Normalize(request.Kind, id);
+            targets.Add(target);
+        }
+        if (kind is null)
+        {
+            // No ids: still check the kind.
+            LinkTargets.Normalize(request.Kind, Guid.NewGuid().ToString());
+            return [];
+        }
+        var counts = await db.Links.AsNoTracking()
+            .Where(l => l.Kind == kind && targets.Contains(l.TargetId))
+            .GroupBy(l => l.TargetId)
+            .Select(g => new { Target = g.Key, Count = g.Select(l => l.DocumentId).Distinct().Count() })
+            .ToDictionaryAsync(c => c.Target, c => c.Count, cancellationToken);
+        return targets.Distinct().ToDictionary(t => t, t => counts.GetValueOrDefault(t));
+    }
+
     /// <summary>The documents with these ids, without the OCR text (T89), newest first.</summary>
     public async Task<IReadOnlyList<DocumentSummaryDto>> ListByIdsAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken)
     {

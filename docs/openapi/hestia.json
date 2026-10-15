@@ -240,6 +240,46 @@
         }
       }
     },
+    "/api/documents/by-link/counts": {
+      "post": {
+        "tags": [
+          "Documents"
+        ],
+        "summary": "How many documents link to each of some things (at most 200), for example the transactions of a page (T72).",
+        "description": "Body: { kind, targetIds }. The answer has every requested id, in its stored form, with its count (0 included).",
+        "operationId": "CountDocumentsByLink",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DocumentLinkCountsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "pattern": "^-?(?:0|[1-9]\\d*)$",
+                    "type": [
+                      "integer",
+                      "string"
+                    ],
+                    "format": "int32"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/documents/{id}": {
       "get": {
         "tags": [
@@ -3232,6 +3272,30 @@
           "Manual",
           "Other"
         ]
+      },
+      "DocumentLinkCountsRequest": {
+        "required": [
+          "kind",
+          "targetIds"
+        ],
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "targetIds": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
+          }
+        }
       },
       "DocumentLinkDto": {
         "required": [

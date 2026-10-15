@@ -372,6 +372,7 @@ upload ──> files to the volume (by SHA-256) + rows and DocumentAdded (one sa
 | `GET /{id}/files/{fileId}` | The file, as a download. `?inline=true` shows it in the browser. |
 | `POST /{id}/ocr` | Runs the OCR again (202, `ocrStatus` `Pending`). |
 | `POST /{id}/links`, `DELETE /{id}/links/{linkId}` | A link, `{ "kind": "Money.Transaction", "targetId": "<transaction id>" }`, `Home.Item` (T22), or `People.Person` (T93). |
+| `POST /by-link/counts` | `{ kind, targetIds }` (at most 200): how many documents link to each (0 included), for an icon on transaction rows (T72). A read-only query: the read-only user can call it. |
 | `GET /by-link?kind=Money.Transaction&id=<transaction id>` | The documents of one thing (for T14). |
 
 ```bash

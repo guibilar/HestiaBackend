@@ -1,5 +1,6 @@
 using Hestia.Modules.Documents.Application;
 using Hestia.Modules.Documents.Contracts;
+using Hestia.Platform.Auth;
 using Hestia.Platform.Exceptions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -49,6 +50,14 @@ public static class DocumentEndpoints
                 service.ListByLinkAsync(kind, id, cancellationToken))
             .WithName("ListDocumentsByLink")
             .WithSummary("The documents linked to one thing, for example ?kind=Money.Transaction&id=<transaction id>.");
+
+        // A query with a body: a read-only user can call it too (T72).
+        documents.MapPost("/by-link/counts", (DocumentLinkCountsRequest request, DocumentService service, CancellationToken cancellationToken) =>
+                service.CountByLinkAsync(request, cancellationToken))
+            .ReadOnlyQuery()
+            .WithName("CountDocumentsByLink")
+            .WithSummary("How many documents link to each of some things (at most 200), for example the transactions of a page (T72).")
+            .WithDescription("Body: { kind, targetIds }. The answer has every requested id, in its stored form, with its count (0 included).");
 
         documents.MapGet("/{id:guid}", (Guid id, DocumentService service, CancellationToken cancellationToken) =>
                 service.GetAsync(id, cancellationToken))

@@ -102,6 +102,14 @@ public sealed record UpdateDocumentRequest(
     DateOnly? ExpiresOn,
     string? Notes);
 
+/// <summary>
+/// How many documents link to each of some things (<c>POST /api/documents/by-link/counts</c>, T72), for example the
+/// transactions of a page: an icon on the rows that have documents.
+/// </summary>
+/// <param name="Kind">A link kind, for example <c>Money.Transaction</c>.</param>
+/// <param name="TargetIds">The ids of the things (at most 200).</param>
+public sealed record DocumentLinkCountsRequest(string? Kind, IReadOnlyList<string>? TargetIds);
+
 /// <summary>A new link (<c>POST /api/documents/{id}/links</c>).</summary>
 /// <param name="Kind">What to link to: <c>Money.Transaction</c>, <c>Home.Item</c>, or <c>People.Person</c>.</param>
 /// <param name="TargetId">The id of the thing, for example the transaction id.</param>
