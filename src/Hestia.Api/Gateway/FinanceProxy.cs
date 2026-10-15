@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using Hestia.Platform.Auth;
 using Hestia.Platform.Finance;
+using Hestia.Platform.Modules;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.Extensions.Options;
 using Yarp.ReverseProxy.Configuration;
@@ -45,6 +46,7 @@ public static class FinanceProxy
         services.AddSingleton<IValidateOptions<FinanceProxyOptions>, FinanceProxyOptionsValidator>();
 
         services.AddSingleton<GatewayTokens>();
+        services.AddSingleton<IModuleCommand, GatewayKeyCommand>();
         services.AddHttpContextAccessor();
         // The shared finance client for modules (D13).
         services.AddHttpClient<IFinanceClient, FinanceClient>((provider, client) =>

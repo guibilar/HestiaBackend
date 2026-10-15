@@ -15,6 +15,8 @@ namespace Hestia.Api.Gateway;
 /// <para>Claims: <c>iss</c> = hestia-api, <c>aud</c> = finance, <c>sub</c> (user id), <c>name</c>, <c>scope</c>
 /// (<c>full</c> or <c>read-only</c>), <c>iat</c>, <c>nbf</c>, <c>exp</c> (<c>FinanceProxy:TokenLifetime</c>, 60 seconds),
 /// and <c>jti</c>.</para>
+/// <para>The header has <c>kid</c>: the key id of the signing key (<see cref="GatewaySigningKey.KeyId"/>, T43). With
+/// two public keys during a key change, finance finds the right key by it.</para>
 /// <para>The system identity of background work (T42) has <c>sub</c> = <see cref="SystemSubject"/> and
 /// <c>name</c> = <c>system:&lt;caller&gt;</c>. Its scope is also <c>full</c> or <c>read-only</c>, so finance needs no
 /// change for it.</para>
@@ -35,9 +37,7 @@ public sealed class GatewayTokens : IDisposable
     /// <summary>The prefix of the <c>name</c> of the system identity, before the caller name.</summary>
     public const string SystemNamePrefix = "system:";
 
-    // {"alg":"ES256","typ":"JWT"}
-    private static readonly string Header = Base64Url.EncodeToString("""{"alg":"ES256","typ":"JWT"}"""u8);
-
+    private readonly string _header;
     private readonly ECDsa _key;
     private readonly TimeProvider _time;
     private readonly TimeSpan _lifetime;
@@ -45,9 +45,16 @@ public sealed class GatewayTokens : IDisposable
     public GatewayTokens(IOptions<FinanceProxyOptions> options, TimeProvider time)
     {
         _key = GatewaySigningKey.Load(options.Value.SigningKey);
+        KeyId = GatewaySigningKey.KeyId(_key);
+        // {"alg":"ES256","typ":"JWT","kid":"<key id>"}
+        _header = Base64Url.EncodeToString(JsonSerializer.SerializeToUtf8Bytes(
+            new Dictionary<string, string> { ["alg"] = "ES256", ["typ"] = "JWT", ["kid"] = KeyId }));
         _time = time;
         _lifetime = options.Value.TokenLifetime;
     }
+
+    /// <summary>The key id of the signing key: the <c>kid</c> of each token.</summary>
+    public string KeyId { get; }
 
     /// <summary>A new token for <paramref name="user"/>, who must be signed in.</summary>
     public string Create(ClaimsPrincipal user)
@@ -90,7 +97,7 @@ public sealed class GatewayTokens : IDisposable
             ["jti"] = Guid.NewGuid().ToString("N")
         };
         var payload = Base64Url.EncodeToString(JsonSerializer.SerializeToUtf8Bytes(claims));
-        var signedPart = $"{Header}.{payload}";
+        var signedPart = $"{_header}.{payload}";
         // .NET signs ECDSA in the IEEE P1363 format (r || s), as JWS ES256 requires.
         var signature = _key.SignData(Encoding.ASCII.GetBytes(signedPart), HashAlgorithmName.SHA256);
         return $"{signedPart}.{Base64Url.EncodeToString(signature)}";
@@ -148,6 +155,18 @@ public static class GatewaySigningKey
             throw new InvalidOperationException(
                 $"{FinanceProxyOptions.SectionName}:SigningKey is not an ECDSA P-256 private key (PEM, or PKCS#8 in base64).", exception);
         }
+    }
+
+    /// <summary>
+    /// The key id (T43): the JWK thumbprint of the public key (RFC 7638, SHA-256, base64url). Finance computes the same
+    /// id from its public keys, so no setting holds it. Different keys have different ids.
+    /// </summary>
+    public static string KeyId(ECDsa key)
+    {
+        var parameters = key.ExportParameters(includePrivateParameters: false);
+        // The required members of an EC key in lexical order, with no white space (RFC 7638, section 3).
+        var jwk = $$"""{"crv":"P-256","kty":"EC","x":"{{Base64Url.EncodeToString(parameters.Q.X)}}","y":"{{Base64Url.EncodeToString(parameters.Q.Y)}}"}""";
+        return Base64Url.EncodeToString(SHA256.HashData(Encoding.UTF8.GetBytes(jwk)));
     }
 
     /// <summary>The public key, in PEM, for the finance setting <c>Auth:Gateway:PublicKey</c>.</summary>
