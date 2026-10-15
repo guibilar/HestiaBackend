@@ -17,6 +17,10 @@
     <Project Path="src/Modules/Home/Hestia.Modules.Home/Hestia.Modules.Home.csproj" />
     <Project Path="src/Modules/Home/Hestia.Modules.Home.Contracts/Hestia.Modules.Home.Contracts.csproj" />
   </Folder>
+  <Folder Name="/src/Modules/Journal/">
+    <Project Path="src/Modules/Journal/Hestia.Modules.Journal/Hestia.Modules.Journal.csproj" />
+    <Project Path="src/Modules/Journal/Hestia.Modules.Journal.Contracts/Hestia.Modules.Journal.Contracts.csproj" />
+  </Folder>
   <Folder Name="/src/Modules/People/">
     <Project Path="src/Modules/People/Hestia.Modules.People/Hestia.Modules.People.csproj" />
     <Project Path="src/Modules/People/Hestia.Modules.People.Contracts/Hestia.Modules.People.Contracts.csproj" />
@@ -43,6 +47,7 @@
     <Project Path="tests/Hestia.Modules.Alerts.Tests/Hestia.Modules.Alerts.Tests.csproj" />
     <Project Path="tests/Hestia.Modules.Documents.Tests/Hestia.Modules.Documents.Tests.csproj" />
     <Project Path="tests/Hestia.Modules.Home.Tests/Hestia.Modules.Home.Tests.csproj" />
+    <Project Path="tests/Hestia.Modules.Journal.Tests/Hestia.Modules.Journal.Tests.csproj" />
     <Project Path="tests/Hestia.Modules.People.Tests/Hestia.Modules.People.Tests.csproj" />
     <Project Path="tests/Hestia.Modules.Identity.Tests/Hestia.Modules.Identity.Tests.csproj" />
     <Project Path="tests/Hestia.Modules.Sample.Tests/Hestia.Modules.Sample.Tests.csproj" />

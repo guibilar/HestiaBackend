@@ -1228,6 +1228,206 @@
         }
       }
     },
+    "/api/journal/summary": {
+      "get": {
+        "tags": [
+          "Journal"
+        ],
+        "summary": "Today's entry, the streak, the last 7 days, and \"On this day\" (the same day in earlier years).",
+        "operationId": "GetJournalSummary",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JournalSummaryDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/journal/entries": {
+      "get": {
+        "tags": [
+          "Journal"
+        ],
+        "summary": "A page of entries, newest first (with q: best match first).",
+        "description": "q: words in the text (web search syntax: \"a phrase\", -not). from, to: days, both included.",
+        "operationId": "ListJournalEntries",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedListOfJournalEntrySummaryDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/journal/entries/{day}": {
+      "get": {
+        "tags": [
+          "Journal"
+        ],
+        "summary": "The entry of one day (yyyy-MM-dd). 404 when the day has none.",
+        "operationId": "GetJournalEntry",
+        "parameters": [
+          {
+            "name": "day",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JournalEntryDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Journal"
+        ],
+        "summary": "Writes the whole text of one day: 201 for a new entry, 200 for a change.",
+        "description": "The text is required (at most 20000 characters). A day after today is refused (400).",
+        "operationId": "SaveJournalEntry",
+        "parameters": [
+          {
+            "name": "day",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveJournalEntryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JournalEntryDto"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JournalEntryDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Journal"
+        ],
+        "summary": "Deletes the entry of one day.",
+        "operationId": "DeleteJournalEntry",
+        "parameters": [
+          {
+            "name": "day",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
     "/api/people/summary": {
       "get": {
         "tags": [
@@ -4046,6 +4246,143 @@
           }
         }
       },
+      "JournalDayDto": {
+        "required": [
+          "day",
+          "written"
+        ],
+        "type": "object",
+        "properties": {
+          "day": {
+            "type": "string",
+            "format": "date"
+          },
+          "written": {
+            "type": "boolean"
+          }
+        }
+      },
+      "JournalEntryDto": {
+        "required": [
+          "id",
+          "day",
+          "text",
+          "createdAt",
+          "updatedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "day": {
+            "type": "string",
+            "format": "date"
+          },
+          "text": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "JournalEntrySummaryDto": {
+        "required": [
+          "id",
+          "day",
+          "excerpt",
+          "length",
+          "updatedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "day": {
+            "type": "string",
+            "format": "date"
+          },
+          "excerpt": {
+            "type": "string"
+          },
+          "length": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "JournalSummaryDto": {
+        "required": [
+          "date",
+          "streak",
+          "week",
+          "today",
+          "onThisDay",
+          "entryCount"
+        ],
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date"
+          },
+          "streak": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "week": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/JournalDayDto"
+            }
+          },
+          "today": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/JournalEntryDto"
+              }
+            ]
+          },
+          "onThisDay": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OnThisDayDto"
+            }
+          },
+          "entryCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
       "LoanDirection": {
         "enum": [
           "Lent",
@@ -4267,6 +4604,26 @@
           "NotNeeded"
         ]
       },
+      "OnThisDayDto": {
+        "required": [
+          "yearsAgo",
+          "entry"
+        ],
+        "type": "object",
+        "properties": {
+          "yearsAgo": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "entry": {
+            "$ref": "#/components/schemas/JournalEntrySummaryDto"
+          }
+        }
+      },
       "PaginatedListOfDocumentSummaryDto": {
         "type": "object",
         "properties": {
@@ -4372,6 +4729,55 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ItemSummaryDto"
+            }
+          },
+          "page": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "pageSize": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "totalCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "totalPages": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "hasPreviousPage": {
+            "type": "boolean"
+          },
+          "hasNextPage": {
+            "type": "boolean"
+          }
+        }
+      },
+      "PaginatedListOfJournalEntrySummaryDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/JournalEntrySummaryDto"
             }
           },
           "page": {
@@ -4996,6 +5402,20 @@
           "createdAt": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "SaveJournalEntryRequest": {
+        "required": [
+          "text"
+        ],
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -5960,6 +6380,9 @@
     },
     {
       "name": "AuthEndpoints"
+    },
+    {
+      "name": "Journal"
     },
     {
       "name": "People"
