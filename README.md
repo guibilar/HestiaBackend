@@ -306,7 +306,8 @@ logic is in one place, here, and not in the web and Android clients.
 ## Alerts
 
 The Alerts module (T15, schema `alerts`) owns the "Needs attention" list of all modules. Today shows it, and the clients
-can poll it (`GET /api/alerts`, for example for Android notifications later).
+can poll it (`GET /api/alerts`, for example for Android notifications later). The list is most severe first;
+`GET /api/alerts?order=module` gives the Today order (module order, then the order of each module's rules; T74).
 
 ```
 module rules (IAlertSource) ──check──> alert store (raise, update, resolve) ──> Today, GET /api/alerts
