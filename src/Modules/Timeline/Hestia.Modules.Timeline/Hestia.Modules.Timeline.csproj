@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Internal: the Timeline service (it merges the entries of every ITimelineSource), the Money source, and the
+       endpoints. The module has no data of its own (no DbContext). Only the host references this project. -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Hestia.Platform\Hestia.Platform.csproj" />
+    <ProjectReference Include="..\Hestia.Modules.Timeline.Contracts\Hestia.Modules.Timeline.Contracts.csproj" />
+  </ItemGroup>
+
+</Project>

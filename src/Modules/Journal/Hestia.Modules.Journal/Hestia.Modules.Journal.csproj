@@ -11,6 +11,8 @@
     <ProjectReference Include="..\Hestia.Modules.Journal.Contracts\Hestia.Modules.Journal.Contracts.csproj" />
     <!-- The Journal tile on Today (ITodayCardProvider). -->
     <ProjectReference Include="..\..\Today\Hestia.Modules.Today.Contracts\Hestia.Modules.Today.Contracts.csproj" />
+    <!-- The Timeline entries of the module (ITimelineSource; T16). -->
+    <ProjectReference Include="..\..\Timeline\Hestia.Modules.Timeline.Contracts\Hestia.Modules.Timeline.Contracts.csproj" />
   </ItemGroup>
 
 </Project>

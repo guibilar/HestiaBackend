@@ -4,6 +4,7 @@ using Hestia.Modules.Documents.Application.Ocr;
 using Hestia.Modules.Documents.Contracts;
 using Hestia.Modules.Documents.Endpoints;
 using Hestia.Modules.Documents.Infrastructure;
+using Hestia.Modules.Timeline.Contracts;
 using Hestia.Platform.Health;
 using Hestia.Platform.Hosting;
 using Hestia.Platform.Modules;
@@ -78,6 +79,8 @@ public static class DocumentsModuleExtensions
         services.AddScoped<IAlertSource, DocumentExpiryAlerts>();
         // T80: the rows without a file, from the last scheduled file check (FileCheckWorker).
         services.AddScoped<IAlertSource, DocumentFileAlerts>();
+        // The Timeline entries (T16).
+        services.AddScoped<ITimelineSource, DocumentTimeline>();
         return services;
     }
 

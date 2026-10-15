@@ -3,6 +3,7 @@ using Hestia.Modules.People.Application;
 using Hestia.Modules.People.Contracts;
 using Hestia.Modules.People.Endpoints;
 using Hestia.Modules.People.Infrastructure;
+using Hestia.Modules.Timeline.Contracts;
 using Hestia.Platform.Hosting;
 using Hestia.Platform.Modules;
 using Hestia.Platform.Persistence;
@@ -52,6 +53,8 @@ public static class PeopleModuleExtensions
         // The reminder alerts (T15): the Alerts module runs them, and Today shows them. After a People event,
         // PeopleAlertsConsumer asks for a check (Wolverine finds it; it needs no registration).
         services.AddScoped<IAlertSource, ReminderAlerts>();
+        // The Timeline entries (T16).
+        services.AddScoped<ITimelineSource, PeopleTimeline>();
         return services;
     }
 
