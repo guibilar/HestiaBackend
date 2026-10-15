@@ -712,6 +712,15 @@ The host describes the module endpoints (not the finance paths) at `/openapi/v1.
 curl -H "Authorization: Bearer $HESTIA_READONLY_TOKEN" http://localhost:5097/openapi/v1.json > hestia-openapi.json
 ```
 
+**The document in the repository (T48).** `docs/openapi/hestia.json` is the same document, so the clients can read it
+without a running host (the web app can check or generate its models from it, T50). The test `OpenApiDocumentTests`
+fails in CI when the file is not current, for example after a change to a contract. To update it:
+
+```bash
+HESTIA_UPDATE_OPENAPI=1 dotnet test
+git add docs/openapi/hestia.json
+```
+
 ## Finance proxy
 
 `Hestia.Api` sits between the frontend's nginx and the finance backend (D6). The code is in `src/Hestia.Api/Gateway/`
