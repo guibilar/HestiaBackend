@@ -45,10 +45,11 @@ public class InboxTests
             .ReadAsync<InboxItemDto>();
         Assert.Equal("Task", sorted.SortedTo);
         Assert.NotNull(sorted.DoneAt);
-        // Sorted twice: the first time and place stay.
+        // Sorted twice: the first time and place stay. (Compare with the stored time: PostgreSQL keeps microseconds.)
+        var stored = await (await client.GetAsync($"{Inbox}/{first.Id}")).ReadAsync<InboxItemDto>();
         var again = await (await client.PostAsJsonAsync($"{Inbox}/{first.Id}/done", new InboxDoneRequest("Journal"), HestiaApiFactory.Json))
             .ReadAsync<InboxItemDto>();
-        Assert.Equal((sorted.DoneAt, "Task"), (again.DoneAt, again.SortedTo));
+        Assert.Equal((stored.DoneAt, "Task"), (again.DoneAt, again.SortedTo));
         Assert.Equal([second.Id], (await ListAsync(client)).Items.Select(i => i.Id));
         Assert.Equal([first.Id], (await ListAsync(client, "?done=true")).Items.Select(i => i.Id));
 
