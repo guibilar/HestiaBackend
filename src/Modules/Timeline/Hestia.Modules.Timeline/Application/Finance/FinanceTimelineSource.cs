@@ -36,10 +36,29 @@ public sealed class FinanceTimelineSource(IFinanceClient finance, ILogger<Financ
         var reviewEntries = await reviews;
 
         var entries = page.Items.Select(Entry).ToList();
-        entries.AddRange(reviewEntries.OfType<TimelineEntry>());
+        entries.AddRange(reviewEntries.Where(r => r.Entry is not null).Select(r => r.Entry!));
         // More transactions than one page: the oldest are missing.
-        var complete = page.TotalCount <= page.Items.Count && reviewEntries.All(r => r is not null);
+        var complete = page.TotalCount <= page.Items.Count && reviewEntries.All(r => r.Loaded);
         return new TimelineEntries(entries, complete);
+    }
+
+    /// <summary>
+    /// The latest transaction day before the range; or the first day of the month after it (the review of that month),
+    /// when that day is also before the range.
+    /// </summary>
+    public async Task<DateOnly?> LatestBeforeAsync(TimelineRange range, CancellationToken cancellationToken)
+    {
+        // Finance sorts by date, newest first: the first transaction of the page is the latest.
+        var filter = new LatestTransactionFilter(range.From.AddDays(-1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
+        var page = await finance.PostAsync<LatestTransactionFilter, TransactionPage>("/api/Transaction/Filter", filter, cancellationToken);
+        var days = page.Items.Select(t => Entry(t).Day).Where(d => d < range.From).ToList();
+        if (days.Count == 0)
+        {
+            return null;
+        }
+        var day = days.Max();
+        var review = new DateOnly(day.Year, day.Month, 1).AddMonths(1);
+        return review < range.From ? review : day;
     }
 
     private static TimelineEntry Entry(Transaction t)
@@ -72,21 +91,28 @@ public sealed class FinanceTimelineSource(IFinanceClient finance, ILogger<Financ
         }
     }
 
-    /// <summary>"September in review" on October 1st; null when finance did not give the review (the error is logged).</summary>
-    private async Task<TimelineEntry?> ReviewAsync(DateOnly monthStart, CancellationToken cancellationToken)
+    /// <summary>
+    /// "September in review" on October 1st. No entry for a month without purchases and spending (for example before the
+    /// data starts); not loaded when finance did not give the review (the error is logged).
+    /// </summary>
+    private async Task<(bool Loaded, TimelineEntry? Entry)> ReviewAsync(DateOnly monthStart, CancellationToken cancellationToken)
     {
         var month = monthStart.AddMonths(-1);
         try
         {
             var review = await finance.GetAsync<ReviewReport>(
                 $"/api/Reports/review?year={month.Year}&month={month.Month}", cancellationToken);
+            if (review.Purchases == 0 && review.Spending == 0)
+            {
+                return (true, null);
+            }
             var name = month.ToString("MMMM", CultureInfo.InvariantCulture);
             var text = review.Purchases == 1 ? "1 purchase" : $"{review.Purchases} purchases";
             if (review.NoSpendDays > 0)
             {
                 text += review.NoSpendDays == 1 ? ", 1 day without spending" : $", {review.NoSpendDays} days without spending";
             }
-            return new TimelineEntry(
+            return (true, new TimelineEntry(
                 $"money.month-review.{month:yyyy-MM}",
                 ModuleName,
                 "month-review",
@@ -95,12 +121,12 @@ public sealed class FinanceTimelineSource(IFinanceClient finance, ILogger<Financ
                 $"{name} in review",
                 text,
                 -review.Spending,
-                $"/money/review?year={month.Year}&month={month.Month}");
+                $"/money/review?year={month.Year}&month={month.Month}"));
         }
         catch (FinanceRequestException exception)
         {
             logger.LogWarning(exception, "Timeline: the review of {Month} did not load", month.ToString("yyyy-MM", CultureInfo.InvariantCulture));
-            return null;
+            return (false, null);
         }
     }
 }
@@ -110,6 +136,14 @@ public sealed class FinanceTimelineSource(IFinanceClient finance, ILogger<Financ
 
 /// <summary>The body of <c>POST /api/Transaction/Filter</c>: the days (both included), newest first.</summary>
 public sealed record TransactionFilter(DateTime StartDate, DateTime EndDate, int Page, int PageSize);
+
+/// <summary>The latest transaction up to <see cref="EndDate"/> (finance sorts newest first).</summary>
+public sealed record LatestTransactionFilter(DateTime EndDate)
+{
+    public int Page => 1;
+
+    public int PageSize => 1;
+}
 
 public sealed record TransactionPage
 {

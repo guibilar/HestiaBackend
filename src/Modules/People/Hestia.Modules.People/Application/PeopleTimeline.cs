@@ -43,4 +43,16 @@ public sealed class PeopleTimeline(PeopleDbContext db) : ITimelineSource
             $"Added {p.Name}", p.Relationship, null, $"/people/{p.Id:D}")));
         return new TimelineEntries(entries);
     }
+
+    public async Task<DateOnly?> LatestBeforeAsync(TimelineRange range, CancellationToken cancellationToken)
+    {
+        var (from, start) = (range.From, range.Start);
+        var contact = await db.Interactions.AsNoTracking().Where(i => i.OccurredOn < from)
+            .MaxAsync(i => (DateOnly?)i.OccurredOn, cancellationToken);
+        var loan = await db.Loans.AsNoTracking().Where(l => l.LentOn < from).MaxAsync(l => (DateOnly?)l.LentOn, cancellationToken);
+        var gift = await db.Gifts.AsNoTracking().Where(g => g.GivenOn < from).MaxAsync(g => g.GivenOn, cancellationToken);
+        var added = await db.People.AsNoTracking().Where(p => p.CreatedAt < start)
+            .MaxAsync(p => (DateTimeOffset?)p.CreatedAt, cancellationToken);
+        return new[] { contact, loan, gift, added is { } at ? range.DayOf(at) : null }.Max();
+    }
 }

@@ -24,4 +24,12 @@ public sealed class HomeTimeline(HomeDbContext db) : ITimelineSource
             i.RoomId is { } room && rooms.TryGetValue(room, out var roomName) ? $"Added to {roomName}" : "Added to the inventory",
             null, $"/home/items/{i.Id:D}")).ToList());
     }
+
+    public async Task<DateOnly?> LatestBeforeAsync(TimelineRange range, CancellationToken cancellationToken)
+    {
+        var start = range.Start;
+        var latest = await db.Items.AsNoTracking().Where(i => i.CreatedAt < start)
+            .MaxAsync(i => (DateTimeOffset?)i.CreatedAt, cancellationToken);
+        return latest is { } at ? range.DayOf(at) : null;
+    }
 }
