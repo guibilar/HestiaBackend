@@ -4,7 +4,8 @@ using Microsoft.Extensions.Logging;
 namespace Hestia.Testing;
 
 /// <summary>One log line that <see cref="LogCapture"/> kept.</summary>
-public sealed record CapturedLog(string Category, LogLevel Level, string Message);
+/// <param name="At">When the line was written (real time), for the timeline of a failed test.</param>
+public sealed record CapturedLog(string Category, LogLevel Level, string Message, DateTimeOffset At = default);
 
 /// <summary>
 /// A logger provider that keeps every log line of a test host. Add it with
@@ -33,6 +34,6 @@ public sealed class LogCapture : ILoggerProvider
         public bool IsEnabled(LogLevel logLevel) => true;
 
         public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
-            Func<TState, Exception?, string> formatter) => lines.Enqueue(new CapturedLog(category, logLevel, formatter(state, exception)));
+            Func<TState, Exception?, string> formatter) => lines.Enqueue(new CapturedLog(category, logLevel, formatter(state, exception), DateTimeOffset.UtcNow));
     }
 }
