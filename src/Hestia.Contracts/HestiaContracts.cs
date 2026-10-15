@@ -9,3 +9,4 @@ public static class HestiaContracts
     /// <summary>The assembly that holds the shared contracts.</summary>
     public static System.Reflection.Assembly Assembly => typeof(HestiaContracts).Assembly;
 }
+// probe T51 (do not merge)
