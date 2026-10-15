@@ -731,7 +731,8 @@ The route table is in configuration, in the section `FinanceProxy` of `appsettin
 | `ActivityTimeout` | `00:01:40` | How long a proxied request can stay idle before the host stops it. |
 
 When the finance backend gets a new controller, add its path to `Paths`. When it gets a new read-only POST query, add
-its path to `ReadOnlyQueries`. The host does not start with an invalid `FinanceProxy` section. When the host starts, it
+its path to `ReadOnlyQueries` (CI checks this list against finance's `docs/read-only-queries.txt` with
+`scripts/check-finance-read-only-queries.sh`, T44). The host does not start with an invalid `FinanceProxy` section. When the host starts, it
 logs a warning for each module endpoint on a finance path (the module gets these requests, not finance).
 
 What the proxy keeps and changes:

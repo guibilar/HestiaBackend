@@ -36,6 +36,10 @@ jobs:
       - name: Migrations match the model (each module)
         run: sh scripts/check-migrations.sh
 
+      # T44: the finance read-only queries (finance docs/read-only-queries.txt) match FinanceProxy:ReadOnlyQueries.
+      - name: Finance read-only queries match FinanceProxy:ReadOnlyQueries
+        run: scripts/check-finance-read-only-queries.sh
+
       # T11: the OCR programs of the host image, so the Documents tests run the real OCR on the sample files.
       - name: OCR programs (ocrmypdf, Tesseract, pdftotext)
         run: |
