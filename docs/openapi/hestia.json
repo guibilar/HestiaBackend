@@ -11,7 +11,7 @@
           "Alerts"
         ],
         "summary": "The open \"Needs attention\" items of all modules.",
-        "description": "Most severe first, then newest first. Each alert has the fields of a Today attention card, and raisedAt. The host checks the rules in the background; refresh=true checks them first (at most Alerts:RefreshWait).",
+        "description": "Most severe first, then newest first; order=module gives the Today order (module order, then the order of each module's rules, T74). Each alert has the fields of a Today attention card, and raisedAt. The host checks the rules in the background; refresh=true checks them first (at most Alerts:RefreshWait).",
         "operationId": "GetAlerts",
         "parameters": [
           {
@@ -20,6 +20,13 @@
             "schema": {
               "type": "boolean",
               "default": false
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "schema": {
+              "type": "string"
             }
           }
         ],

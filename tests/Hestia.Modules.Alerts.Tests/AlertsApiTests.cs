@@ -67,6 +67,26 @@ public sealed class AlertsApiTests
     }
 
     [Fact]
+    public async Task OrderModule_GivesTheTodayOrder_AndAnotherOrderIsABadRequest()
+    {
+        var data = new FinanceData();
+        await using var finance = await FakeFinance.StartAsync(data.RespondAsync);
+        await using var factory = Start(finance, new TestClock(FinanceData.Now));
+        var client = factory.CreateClient();
+        await GetAlertsAsync(client);
+
+        var response = await client.GetAsync($"{AlertsPath}?order=module");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var byModule = await response.ReadAsync<AlertList>();
+        await using var scope = factory.Services.CreateAsyncScope();
+        var today = await scope.ServiceProvider.GetRequiredService<IAlertQueries>()
+            .GetOpenAsync(new AlertListOptions(false, AlertOrder.Module));
+
+        Assert.Equal(today.Alerts.Select(a => a.Id), byModule.Alerts.Select(a => a.Id));
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.GetAsync($"{AlertsPath}?order=newest")).StatusCode);
+    }
+
+    [Fact]
     public async Task AReadOnlyUser_CanCallIt()
     {
         var data = new FinanceData();
