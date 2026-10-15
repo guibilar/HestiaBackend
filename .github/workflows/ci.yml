@@ -171,7 +171,7 @@ jobs:
           echo "$body" | jq -e 'keys == ["checks", "status"]'
       # T03: health, sign-in, the session cookie, a module, finance (the stub), sign-out, and 401 without a session.
       - name: Smoke test (docker/smoke-test.sh)
-        run: docker/smoke-test.sh http://localhost:1
+        run: docker/smoke-test.sh http://localhost:5097
       - name: Sign in (a session cookie for the next steps)
         run: |
           session=$(curl -sf -D - -o /dev/null -H 'Content-Type: application/json' \
@@ -394,7 +394,9 @@ jobs:
           docker exec rabbitmq rabbitmqctl list_bindings
           exit 1
       - name: The host runs as a non-root user
-        run: test "$(docker exec hestia-api id -u)" != 0
+        run: |
+          echo "probe: the user id is $(docker exec hestia-api id -u)"
+          test "$(docker exec hestia-api id -u)" = 12345
       # T24: the backup container wrote a dump at start; a new dump restores into an empty database and with docker/restore.sh.
       - name: Backups (backup.sh) restore, with the sample schema and its data
         run: docker/ci/backup-restore-check.sh http://localhost:5097
