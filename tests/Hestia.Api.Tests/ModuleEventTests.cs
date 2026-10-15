@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Net.Http.Json;
 using Hestia.Api.Events;
 using Hestia.Contracts;
@@ -190,7 +189,7 @@ public class ModuleEventTests
 
         var created = await (await client.PostAsJsonAsync(Items, new CreateSampleItemRequest("Kettle"))).ReadAsync<SampleItemDto>();
 
-        var line = await Eventually(() => Task.FromResult(logs.Find("Event received: SampleItemCreated")), found => found is not null);
+        var line = await Eventually(() => Task.FromResult(logs.Find("Event received: SampleItemCreated").FirstOrDefault()?.Message), found => found is not null);
         Assert.Contains($"ItemId = {created.Id}", line);
         Assert.Contains("Name = Kettle", line);
     }
@@ -208,7 +207,7 @@ public class ModuleEventTests
         await client.PostAsJsonAsync(Items, new CreateSampleItemRequest("Kettle"));
         await Eventually(async () => await client.GetFromJsonAsync<SampleActivityDto>("/api/sample/activity"), dto => dto?.ItemsCreated == 1);
 
-        Assert.Null(logs.Find("Event received:"));
+        Assert.Null(logs.Find("Event received:").FirstOrDefault()?.Message);
     }
 
     private static async Task<T> Eventually<T>(Func<Task<T>> read, Func<T, bool> done)
@@ -222,30 +221,6 @@ public class ModuleEventTests
                 return value;
             }
             await Task.Delay(50);
-        }
-    }
-
-    /// <summary>Keeps every log line of the host.</summary>
-    private sealed class LogCapture : ILoggerProvider
-    {
-        private readonly ConcurrentQueue<string> _lines = new();
-
-        public string? Find(string text) => _lines.FirstOrDefault(line => line.Contains(text, StringComparison.Ordinal));
-
-        public ILogger CreateLogger(string categoryName) => new Logger(_lines);
-
-        public void Dispose()
-        {
-        }
-
-        private sealed class Logger(ConcurrentQueue<string> lines) : ILogger
-        {
-            public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
-
-            public bool IsEnabled(LogLevel logLevel) => true;
-
-            public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
-                Func<TState, Exception?, string> formatter) => lines.Enqueue(formatter(state, exception));
         }
     }
 }

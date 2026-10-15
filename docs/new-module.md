@@ -230,8 +230,10 @@ modules. Today shows it, and the clients can poll it. The Documents module is th
 - **Alert rules that depend on a count** (for example "one alert per overdue task, or one alert for many"): a check of
   one target cannot know the count. Check everything: pass `target: null` to `IAlertChecks.CheckAsync`, with the
   trigger, and cover all the prefixes of the source.
-- **Your own days:** when "today" matters (due dates), take a `TimeZone` setting for your module (Docker: from `TZ`),
-  and compute the day from the host's `TimeProvider`. In an alert source, use `context.Now` in your time zone, so the
+- **Your own days:** when "today" matters (due dates), give your options a `TimeZone` and fill it with
+  `.PostConfigure(options => options.TimeZone = HestiaTimeZone.For(configuration, SectionName))` (T85,
+  `Hestia.Platform.Hosting`): the shared `Hestia:TimeZone`, unless `<Module>:TimeZone` overrides it. Do not add a
+  Docker variable for it. Compute the day from the host's `TimeProvider`. In an alert source, use `context.Now` in your time zone, so the
   Alerts module's clock and yours agree. Use the same day in your Today provider and your endpoints.
 - **Enum names that clash:** do not name an enum `TaskStatus` or a class `Task` in a module (they clash with
   `System.Threading.Tasks`). The Tasks module uses `TaskItem` and `TaskItemStatus`.

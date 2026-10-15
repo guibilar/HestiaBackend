@@ -3,6 +3,7 @@ using Hestia.Modules.People.Application;
 using Hestia.Modules.People.Contracts;
 using Hestia.Modules.People.Endpoints;
 using Hestia.Modules.People.Infrastructure;
+using Hestia.Platform.Hosting;
 using Hestia.Platform.Modules;
 using Hestia.Platform.Persistence;
 using Microsoft.AspNetCore.Routing;
@@ -33,6 +34,8 @@ public static class PeopleModuleExtensions
     {
         services.AddOptions<PeopleOptions>()
             .Bind(configuration.GetSection(PeopleOptions.SectionName))
+            // The shared zone (Hestia:TimeZone, T85), unless People:TimeZone overrides it.
+            .PostConfigure(options => options.TimeZone = HestiaTimeZone.For(configuration, PeopleOptions.SectionName))
             .Validate(options => options.IsValid(), PeopleOptions.ValidationMessage)
             .ValidateOnStart();
 

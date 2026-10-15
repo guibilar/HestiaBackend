@@ -3,6 +3,7 @@ using Hestia.Modules.Alerts.Application.Finance;
 using Hestia.Modules.Alerts.Contracts;
 using Hestia.Modules.Alerts.Endpoints;
 using Hestia.Modules.Alerts.Infrastructure;
+using Hestia.Platform.Hosting;
 using Hestia.Platform.Modules;
 using Hestia.Platform.Persistence;
 using Microsoft.AspNetCore.Routing;
@@ -34,6 +35,8 @@ public static class AlertsModuleExtensions
     {
         services.AddOptions<AlertsOptions>()
             .Bind(configuration.GetSection(AlertsOptions.SectionName))
+            // The shared zone (Hestia:TimeZone, T85), unless Alerts:TimeZone overrides it.
+            .PostConfigure(options => options.TimeZone = HestiaTimeZone.For(configuration, AlertsOptions.SectionName))
             .Validate(options => options.IsValid(), AlertsOptions.ValidationMessage)
             .ValidateOnStart();
 

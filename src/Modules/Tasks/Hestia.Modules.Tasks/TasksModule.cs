@@ -4,6 +4,7 @@ using Hestia.Modules.Tasks.Contracts;
 using Hestia.Modules.Tasks.Endpoints;
 using Hestia.Modules.Tasks.Infrastructure;
 using Hestia.Modules.Today.Contracts;
+using Hestia.Platform.Hosting;
 using Hestia.Platform.Modules;
 using Hestia.Platform.Persistence;
 using Microsoft.AspNetCore.Routing;
@@ -34,6 +35,8 @@ public static class TasksModuleExtensions
     {
         services.AddOptions<TasksOptions>()
             .Bind(configuration.GetSection(TasksOptions.SectionName))
+            // The shared zone (Hestia:TimeZone, T85), unless Tasks:TimeZone overrides it.
+            .PostConfigure(options => options.TimeZone = HestiaTimeZone.For(configuration, TasksOptions.SectionName))
             .Validate(options => options.IsValid(), TasksOptions.ValidationMessage)
             .ValidateOnStart();
 
