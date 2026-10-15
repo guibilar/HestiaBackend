@@ -53,6 +53,7 @@ public static class DocumentsModuleExtensions
         // Durable events from the first migration (T38): Timeline (T16) and Search (T17) depend on them.
         services.AddModuleDbContext<DocumentsDbContext>(DocumentsDbContext.SchemaName, database => database.UseDurableEvents());
         services.AddSingleton<DocumentStorage>();
+        services.AddSingleton<DocumentThumbnails>();
         // T59: /health/ready checks that the host can write to the documents folder.
         services.AddHealthChecks().AddCheck<DocumentStorageHealthCheck>(DocumentStorageHealthCheck.Name, tags: [HealthTags.Ready]);
         // T59, T64: the checks of the volume (unused files, rows without a file), as a command and on a schedule.

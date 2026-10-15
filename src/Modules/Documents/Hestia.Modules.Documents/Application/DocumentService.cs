@@ -41,6 +41,7 @@ public sealed class DocumentService(
     DocumentStorage storage,
     LinkTargets linkTargets,
     OcrSignal ocrSignal,
+    DocumentThumbnails thumbnails,
     IOptions<DocumentsOptions> options,
     TimeProvider time,
     ILogger<DocumentService> logger)
@@ -340,6 +341,28 @@ public sealed class DocumentService(
             throw new NotFoundException("File", fileId);
         }
         return new DocumentFileContent(path, file.ContentType, file.FileName);
+    }
+
+    /// <summary>The thumbnail of one file of a document (T61): its path, made now when it is not there yet.</summary>
+    /// <exception cref="NotFoundException">No such file, or no thumbnail can be made for it.</exception>
+    public async Task<string> GetThumbnailAsync(Guid id, Guid fileId, CancellationToken cancellationToken)
+    {
+        var file = await db.Files.AsNoTracking().FirstOrDefaultAsync(f => f.Id == fileId && f.DocumentId == id, cancellationToken)
+            ?? throw new NotFoundException("File", fileId);
+        if (!storage.Exists(file.StorageKey))
+        {
+            logger.LogError("Documents: the file {StorageKey} of document {DocumentId} is not on the volume", file.StorageKey, id);
+            throw new NotFoundException("File", fileId);
+        }
+        try
+        {
+            return await thumbnails.GetAsync(file.StorageKey, file.ContentType, cancellationToken);
+        }
+        catch (ThumbnailUnavailableException)
+        {
+            // The clients show the icon of the type instead.
+            throw new NotFoundException("Thumbnail", fileId);
+        }
     }
 
     public async Task<DocumentDto> RetryOcrAsync(Guid id, CancellationToken cancellationToken)

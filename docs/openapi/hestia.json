@@ -424,6 +424,40 @@
         }
       }
     },
+    "/api/documents/{id}/files/{fileId}/thumbnail": {
+      "get": {
+        "tags": [
+          "Documents"
+        ],
+        "summary": "A JPEG preview of one file (T61): the first page of a PDF, or the photo, at most 480 pixels on its longest side. 404 when no preview can be made: show the icon of the type.",
+        "operationId": "GetDocumentFileThumbnail",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "fileId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/documents/{id}/ocr": {
       "post": {
         "tags": [

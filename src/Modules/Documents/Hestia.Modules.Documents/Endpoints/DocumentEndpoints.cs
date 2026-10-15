@@ -96,6 +96,18 @@ public static class DocumentEndpoints
             .WithName("DownloadDocumentFile")
             .WithSummary("The content of one file. inline=true shows it in the browser; the default is a download.");
 
+        documents.MapGet("/{id:guid}/files/{fileId:guid}/thumbnail", async Task<PhysicalFileHttpResult> (Guid id, Guid fileId,
+                HttpContext context, DocumentService service, CancellationToken cancellationToken) =>
+            {
+                var path = await service.GetThumbnailAsync(id, fileId, cancellationToken);
+                context.Response.Headers[HeaderNames.XContentTypeOptions] = "nosniff";
+                // The content of a file never changes, so its thumbnail does not either.
+                context.Response.Headers[HeaderNames.CacheControl] = "private, max-age=2592000, immutable";
+                return TypedResults.PhysicalFile(path, DocumentThumbnails.ContentType);
+            })
+            .WithName("GetDocumentFileThumbnail")
+            .WithSummary($"A JPEG preview of one file (T61): the first page of a PDF, or the photo, at most {DocumentThumbnails.Size} pixels on its longest side. 404 when no preview can be made: show the icon of the type.");
+
         documents.MapPost("/{id:guid}/ocr", async Task<Accepted<DocumentDto>> (Guid id, DocumentService service,
                 CancellationToken cancellationToken) =>
                 TypedResults.Accepted($"{Prefix}/{id}", await service.RetryOcrAsync(id, cancellationToken)))

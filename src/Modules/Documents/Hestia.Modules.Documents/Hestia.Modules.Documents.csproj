@@ -7,6 +7,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Thumbnails of photos (T61). -->
+    <PackageReference Include="SkiaSharp" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\..\Hestia.Platform\Hestia.Platform.csproj" />
     <ProjectReference Include="..\Hestia.Modules.Documents.Contracts\Hestia.Modules.Documents.Contracts.csproj" />
     <!-- The expiry alerts (IAlertSource, IAlertChecks; T15). Today shows them through the Alerts module. -->

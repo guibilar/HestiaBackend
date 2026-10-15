@@ -26,6 +26,9 @@ public sealed partial class DocumentStorage(IOptions<DocumentsOptions> options)
 {
     public const string TempFolder = "tmp";
 
+    /// <summary>The folder of the thumbnails (T61): <c>thumbs/ab/abcdef….jpg</c>, by the storage key of their file.</summary>
+    public const string ThumbnailFolder = "thumbs";
+
     private const int BufferSize = 81920;
 
     [GeneratedRegex("^[0-9a-f]{2}/[0-9a-f]{64}$", RegexOptions.CultureInvariant)]
@@ -127,13 +130,41 @@ public sealed partial class DocumentStorage(IOptions<DocumentsOptions> options)
 
     public bool Exists(string key) => File.Exists(PathOf(key));
 
-    /// <summary>Deletes a stored file. A file that is not there is no error.</summary>
+    /// <summary>The full path of the thumbnail of a stored file (it can be missing).</summary>
+    /// <exception cref="ArgumentException">The key is not a storage key.</exception>
+    public string ThumbnailPathOf(string key)
+    {
+        if (!IsKey(key))
+        {
+            throw new ArgumentException($"\"{key}\" is not a storage key.", nameof(key));
+        }
+        return Path.Combine(Root, ThumbnailFolder, key[..2], key[3..] + ".jpg");
+    }
+
+    /// <summary>The storage key of a thumbnail path relative to the root (<c>thumbs/ab/abc….jpg</c>), or null.</summary>
+    public static string? KeyOfThumbnail(string relativePath)
+    {
+        const string prefix = ThumbnailFolder + "/";
+        if (!relativePath.StartsWith(prefix, StringComparison.Ordinal) || !relativePath.EndsWith(".jpg", StringComparison.Ordinal))
+        {
+            return null;
+        }
+        var key = relativePath[prefix.Length..^4];
+        return IsKey(key) ? key : null;
+    }
+
+    /// <summary>Deletes a stored file and its thumbnail. A file that is not there is no error.</summary>
     public void Delete(string key)
     {
         var path = PathOf(key);
         if (File.Exists(path))
         {
             File.Delete(path);
+        }
+        var thumbnail = ThumbnailPathOf(key);
+        if (File.Exists(thumbnail))
+        {
+            File.Delete(thumbnail);
         }
     }
 }
