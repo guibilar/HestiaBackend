@@ -4,6 +4,7 @@ using Hestia.Modules.Journal.Infrastructure;
 using Hestia.Platform.Exceptions;
 using Hestia.Platform.Paging;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace Hestia.Modules.Journal.Application;
 
@@ -208,7 +209,10 @@ public sealed class JournalService(JournalDbContext db, JournalDays days)
         {
             await db.SaveChangesAsync(cancellationToken);
         }
-        catch (DbUpdateException) when (created)
+        catch (DbUpdateException exception) when (created && exception.InnerException is PostgresException
+        {
+            SqlState: PostgresErrorCodes.UniqueViolation,
+        })
         {
             // A second save of a new day at the same time (two devices): the unique index refused this one.
             throw new ConflictException("The entry of this day was just written somewhere else. Load it again.");

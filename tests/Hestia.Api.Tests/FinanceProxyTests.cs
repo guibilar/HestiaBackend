@@ -73,6 +73,23 @@ public class FinanceProxyTests
     }
 
     [Fact]
+    public async Task Request_WithANul_ReachesFinanceWithoutIt()
+    {
+        // PostgreSQL in finance cannot keep NUL either: the host removes it from the query and the JSON body.
+        await using var finance = await FakeFinance.StartAsync();
+        await using var host = Host(finance);
+        var request = FromNginx(HttpMethod.Post, "/api/Transaction/Filter?q=caf%00e");
+        request.Content = new StringContent("{\"description\":\"Caf\\u0000e\"}", Encoding.UTF8, "application/json");
+
+        var response = await Client(host).SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var received = Assert.Single(finance.Requests);
+        Assert.Equal("/api/Transaction/Filter?q=cafe", received.Target);
+        Assert.Equal("{\"description\":\"Cafe\"}", received.Body);
+    }
+
+    [Fact]
     public async Task ForwardedHeaders_FromAnUntrustedClient_DoNotReachFinance()
     {
         await using var finance = await FakeFinance.StartAsync();

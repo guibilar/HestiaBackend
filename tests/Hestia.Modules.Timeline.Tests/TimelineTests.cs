@@ -224,6 +224,9 @@ public class TimelineTests
     [InlineData("?days=0")]
     [InlineData("?days=32")]
     [InlineData("?module=Recipes")]
+    // Year 1: the page would start before 0001-01-01 (it was a 500).
+    [InlineData("?before=0001-01-01")]
+    [InlineData("?before=0001-01-05&days=7")]
     public async Task BadParameters_Are400(string query)
     {
         await using var host = await StartAsync();
