@@ -13,6 +13,8 @@
     <ProjectReference Include="..\..\Alerts\Hestia.Modules.Alerts.Contracts\Hestia.Modules.Alerts.Contracts.csproj" />
     <!-- Links to home items (T22): the existence check (IHomeQueries) and the ItemDeleted consumer. -->
     <ProjectReference Include="..\..\Home\Hestia.Modules.Home.Contracts\Hestia.Modules.Home.Contracts.csproj" />
+    <!-- Links to people (T93): the existence check (IPeopleQueries) and the PersonDeleted consumer. -->
+    <ProjectReference Include="..\..\People\Hestia.Modules.People.Contracts\Hestia.Modules.People.Contracts.csproj" />
   </ItemGroup>
 
 </Project>

@@ -1,4 +1,6 @@
+using Hestia.Modules.Documents.Contracts;
 using Hestia.Modules.People.Contracts;
+using Hestia.Modules.Tasks.Contracts;
 using Hestia.Modules.People.Domain;
 using Hestia.Modules.People.Infrastructure;
 using Hestia.Platform.Exceptions;
@@ -20,6 +22,8 @@ public sealed record PersonQuery(string? Group, string? Text, string? Sort, int 
 public sealed class PersonService(
     PeopleDbContext db,
     PersonLinkTargets linkTargets,
+    IDocumentQueries documents,
+    ITaskQueries tasks,
     PeopleReader reader,
     PeopleDays days,
     ILogger<PersonService> logger)
@@ -159,7 +163,23 @@ public sealed class PersonService(
             interactionCount,
             gifts.Select(PeopleReader.Gift).ToList(),
             loans.Select(l => PeopleReader.Loan(l, person.Name, today)).ToList(),
-            person.Links.OrderBy(l => l.CreatedAt).ThenBy(l => l.Id).Select(PeopleReader.Link).ToList());
+            person.Links.OrderBy(l => l.CreatedAt).ThenBy(l => l.Id).Select(PeopleReader.Link).ToList(),
+            await LinkedFromAsync(id, cancellationToken));
+    }
+
+    /// <summary>The documents and the tasks that link to a person (kind <c>People.Person</c> there, T93).</summary>
+    private async Task<List<PersonLinkedFromDto>> LinkedFromAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var target = id.ToString("D");
+        var linkedDocuments = await documents.ListByLinkAsync(DocumentLinkKinds.PeoplePerson, target, cancellationToken);
+        var linkedTasks = await tasks.ListByLinkAsync(TaskLinkKinds.PeoplePerson, target, cancellationToken);
+        return linkedDocuments
+            .OrderBy(d => d.Title, StringComparer.OrdinalIgnoreCase).ThenBy(d => d.Id)
+            .Select(d => new PersonLinkedFromDto(PersonLinkKinds.DocumentsDocument, d.Id.ToString("D"), d.Title))
+            .Concat(linkedTasks
+                .OrderBy(t => t.Title, StringComparer.OrdinalIgnoreCase).ThenBy(t => t.Id)
+                .Select(t => new PersonLinkedFromDto(PersonLinkKinds.TasksTask, t.Id.ToString("D"), t.Title)))
+            .ToList();
     }
 
     public async Task<PersonDto> UpdateAsync(Guid id, UpdatePersonRequest request, CancellationToken cancellationToken)
@@ -219,16 +239,34 @@ public sealed class PersonService(
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    /// <summary>The people that link to one thing, by name.</summary>
+    /// <summary>
+    /// The people of one thing, by name, from both sides of the link: the people that link to it, and (for a document or a
+    /// task) the people that it links to (kind <c>People.Person</c>, T93).
+    /// </summary>
     public async Task<List<PersonSummaryDto>> ListByLinkAsync(string? kind, string? targetId, CancellationToken cancellationToken)
     {
         var (linkKind, target) = PersonLinkTargets.Normalize(kind, targetId);
+        var linkedTo = await PeopleLinkedFromAsync(linkKind, Guid.Parse(target), cancellationToken);
         var people = await db.People.AsNoTracking()
-            .Where(p => p.Links.Any(l => l.Kind == linkKind && l.TargetId == target))
+            .Where(p => p.Links.Any(l => l.Kind == linkKind && l.TargetId == target) || linkedTo.Contains(p.Id))
             .OrderBy(p => p.Name).ThenBy(p => p.Id)
             .ToListAsync(cancellationToken);
         var today = days.Today;
         return people.Select(p => reader.Summary(p, today)).ToList();
+    }
+
+    /// <summary>The ids of the people that a document or a task links to (kind <c>People.Person</c>). Other kinds give none.</summary>
+    private async Task<List<Guid>> PeopleLinkedFromAsync(string kind, Guid targetId, CancellationToken cancellationToken)
+    {
+        IEnumerable<string> targets = kind switch
+        {
+            PersonLinkKinds.DocumentsDocument => (await documents.FindAsync(targetId, cancellationToken))?.Links
+                .Where(l => l.Kind == DocumentLinkKinds.PeoplePerson).Select(l => l.TargetId) ?? [],
+            PersonLinkKinds.TasksTask => (await tasks.FindAsync(targetId, cancellationToken))?.Links
+                .Where(l => l.Kind == TaskLinkKinds.PeoplePerson).Select(l => l.TargetId) ?? [],
+            _ => []
+        };
+        return targets.Select(t => Guid.TryParse(t, out var id) ? id : Guid.Empty).Where(id => id != Guid.Empty).Distinct().ToList();
     }
 
     /// <summary>The groups in use, by name, with the count of people in each.</summary>

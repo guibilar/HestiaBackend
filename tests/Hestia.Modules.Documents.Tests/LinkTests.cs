@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Hestia.Modules.Documents.Contracts;
 using Hestia.Modules.Home.Contracts;
+using Hestia.Modules.People.Contracts;
 using Hestia.Testing;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
@@ -109,7 +110,7 @@ public class LinkTests
         Assert.Equal(new[] { warranty.Id, receipt.Id }, found.Select(d => d.Id));
         Assert.Empty(await (await host.Client.GetAsync($"{Documents}/by-link?kind={Kind}&id={Guid.NewGuid()}"))
             .ReadAsync<List<DocumentSummaryDto>>());
-        await UploadTests.AssertBadRequestAsync(await host.Client.GetAsync($"{Documents}/by-link?kind=People.Person&id=1"), "kind");
+        await UploadTests.AssertBadRequestAsync(await host.Client.GetAsync($"{Documents}/by-link?kind=Journal.Entry&id=1"), "kind");
 
         // Other modules use the query interface.
         var queried = await host.Factory.WithScopeAsync(services =>
@@ -134,7 +135,7 @@ public class LinkTests
 
         await UploadTests.AssertBadRequestAsync(await host.Client.PostAsJsonAsync(links, new CreateDocumentLinkRequest(Kind, Guid.NewGuid().ToString())), "targetId");
         await UploadTests.AssertBadRequestAsync(await host.Client.PostAsJsonAsync(links, new CreateDocumentLinkRequest(Kind, "not-a-guid")), "targetId");
-        await UploadTests.AssertBadRequestAsync(await host.Client.PostAsJsonAsync(links, new CreateDocumentLinkRequest("People.Person", "1")), "kind");
+        await UploadTests.AssertBadRequestAsync(await host.Client.PostAsJsonAsync(links, new CreateDocumentLinkRequest("Journal.Entry", "1")), "kind");
         await UploadTests.AssertBadRequestAsync(await host.Client.PostAsJsonAsync(links, new CreateDocumentLinkRequest(null, "1")), "kind");
         Assert.Equal(HttpStatusCode.NotFound, (await host.Client.PostAsJsonAsync($"{Documents}/{Guid.NewGuid()}/links",
             new CreateDocumentLinkRequest(Kind, transactionId.ToString()))).StatusCode);
@@ -232,5 +233,42 @@ public class LinkTests
         Assert.Empty((await (await host.Client.GetAsync($"{Documents}/{document.Id}")).ReadAsync<DocumentDto>()).Links);
         Assert.Equal(1, await host.WithDbAsync(db => db.Set<Hestia.Platform.Events.InboxEntry>()
             .CountAsync(entry => entry.Consumer == Application.DocumentItemLinksConsumer.InboxName)));
+    }
+
+    [Fact]
+    public async Task ALink_ToAPerson_IsCheckedWithThePeopleModule_ShowsOnThePerson_AndGoesWhenThePersonIsDeleted()
+    {
+        var (host, finance, _) = await StartAsync();
+        await using var _host = host;
+        await using var _finance = finance;
+        var document = await host.UploadOkAsync("Prescription", "Other");
+        var created = await host.Client.PostAsJsonAsync("/api/people", new CreatePersonRequest("Dr. Ana Costa"), HestiaApiFactory.Json);
+        var person = (await created.ReadAsync<PersonDto>()).Person;
+        var links = $"{Documents}/{document.Id}/links";
+
+        await UploadTests.AssertBadRequestAsync(await host.Client.PostAsJsonAsync(links,
+            new CreateDocumentLinkRequest(DocumentLinkKinds.PeoplePerson, Guid.NewGuid().ToString())), "targetId");
+        var response = await host.Client.PostAsJsonAsync(links, new CreateDocumentLinkRequest("people.person", person.Id.ToString()));
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var link = await response.ReadAsync<DocumentLinkDto>();
+        Assert.Equal((DocumentLinkKinds.PeoplePerson, person.Id.ToString("D")), (link.Kind, link.TargetId));
+        Assert.Empty(finance.Requests);
+
+        // The person page lists the document (the link belongs to the document), and the people of the document include
+        // the person.
+        var page = await (await host.Client.GetAsync($"/api/people/{person.Id}")).ReadAsync<PersonDto>();
+        Assert.Empty(page.Links);
+        Assert.Equal(new PersonLinkedFromDto(PersonLinkKinds.DocumentsDocument, document.Id.ToString("D"), "Prescription"), Assert.Single(page.LinkedFrom));
+        var people = await (await host.Client.GetAsync($"/api/people/by-link?kind=Documents.Document&id={document.Id}")).ReadAsync<List<PersonSummaryDto>>();
+        Assert.Equal(new[] { person.Id }, people.Select(p => p.Id));
+
+        // The person is deleted: the consumer removes the link (with the inbox), and the document stays.
+        Assert.Equal(HttpStatusCode.NoContent, (await host.Client.DeleteAsync($"/api/people/{person.Id}")).StatusCode);
+        var unlinked = await host.Factory.Events.WaitForAsync<DocumentUnlinked>(e => e.LinkId == link.Id);
+        Assert.Equal((document.Id, DocumentLinkKinds.PeoplePerson), (unlinked.DocumentId, unlinked.LinkKind));
+        Assert.Empty((await (await host.Client.GetAsync($"{Documents}/{document.Id}")).ReadAsync<DocumentDto>()).Links);
+        Assert.Equal(1, await host.WithDbAsync(db => db.Set<Hestia.Platform.Events.InboxEntry>()
+            .CountAsync(entry => entry.Consumer == Application.DocumentPersonLinksConsumer.InboxName)));
     }
 }

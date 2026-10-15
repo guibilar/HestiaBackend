@@ -1,5 +1,6 @@
 using Hestia.Modules.Documents.Contracts;
 using Hestia.Modules.Home.Contracts;
+using Hestia.Modules.People.Contracts;
 using Hestia.Platform.Exceptions;
 using Hestia.Platform.Finance;
 
@@ -8,9 +9,9 @@ namespace Hestia.Modules.Documents.Application;
 /// <summary>
 /// The things that a document can link to (<see cref="DocumentLinkKinds"/>), and the check that one exists: a finance
 /// transaction through finance with the signed-in user (<see cref="IFinanceClient"/>, D13), and a home item through
-/// <see cref="IHomeQueries"/> (T22). The module never reads the finance database or the tables of another module.
+/// <see cref="IHomeQueries"/> (T22), and a person through <see cref="IPeopleQueries"/> (T93). The module never reads the finance database or the tables of another module.
 /// </summary>
-public sealed class LinkTargets(IFinanceClient finance, IHomeQueries home)
+public sealed class LinkTargets(IFinanceClient finance, IHomeQueries home, IPeopleQueries people)
 {
     /// <summary>The kind and the id in their stored form. Does not check that the thing exists.</summary>
     /// <exception cref="InvalidInputException">An unknown kind, or an id that this kind cannot have.</exception>
@@ -25,9 +26,12 @@ public sealed class LinkTargets(IFinanceClient finance, IHomeQueries home)
             ?? throw new InvalidInputException("kind", $"\"{name}\" is not a link kind. Use one of: {string.Join(", ", DocumentLinkKinds.All)}.");
         if (!Guid.TryParse(targetId?.Trim(), out var id) || id == Guid.Empty)
         {
-            throw new InvalidInputException("targetId", known == DocumentLinkKinds.HomeItem
-                ? "A home item id is a GUID."
-                : "A finance transaction id is a GUID.");
+            throw new InvalidInputException("targetId", known switch
+            {
+                DocumentLinkKinds.HomeItem => "A home item id is a GUID.",
+                DocumentLinkKinds.PeoplePerson => "A person id is a GUID.",
+                _ => "A finance transaction id is a GUID."
+            });
         }
         return (known, id.ToString("D"));
     }
@@ -43,6 +47,14 @@ public sealed class LinkTargets(IFinanceClient finance, IHomeQueries home)
             if (await home.FindItemAsync(Guid.Parse(target), cancellationToken) is null)
             {
                 throw new InvalidInputException("targetId", "No home item has this id.");
+            }
+            return (linkKind, target);
+        }
+        if (linkKind == DocumentLinkKinds.PeoplePerson)
+        {
+            if (await people.FindPersonAsync(Guid.Parse(target), cancellationToken) is null)
+            {
+                throw new InvalidInputException("targetId", "No person has this id.");
             }
             return (linkKind, target);
         }

@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Hestia.Modules.Documents.Contracts;
 using Hestia.Modules.Home.Contracts;
+using Hestia.Modules.People.Contracts;
 using Hestia.Modules.Tasks.Application;
 using Hestia.Modules.Tasks.Contracts;
 using Hestia.Platform.Events;
@@ -132,7 +133,7 @@ public class LinkTests
         await TasksHost.AssertBadRequestAsync(await host.Client.PostAsJsonAsync(links, new CreateTaskLinkRequest(DocumentKind, Guid.NewGuid().ToString())), "targetId");
         await TasksHost.AssertBadRequestAsync(await host.Client.PostAsJsonAsync(links, new CreateTaskLinkRequest(MoneyKind, Guid.NewGuid().ToString())), "targetId");
         await TasksHost.AssertBadRequestAsync(await host.Client.PostAsJsonAsync(links, new CreateTaskLinkRequest(DocumentKind, "not-a-guid")), "targetId");
-        await TasksHost.AssertBadRequestAsync(await host.Client.PostAsJsonAsync(links, new CreateTaskLinkRequest("People.Person", "1")), "kind");
+        await TasksHost.AssertBadRequestAsync(await host.Client.PostAsJsonAsync(links, new CreateTaskLinkRequest("Journal.Entry", "1")), "kind");
         await TasksHost.AssertBadRequestAsync(await host.Client.PostAsJsonAsync(links, new CreateTaskLinkRequest(null, "1")), "kind");
         Assert.Equal(HttpStatusCode.NotFound, (await host.Client.PostAsJsonAsync($"{Tasks}/{Guid.NewGuid()}/links",
             new CreateTaskLinkRequest(DocumentKind, Guid.NewGuid().ToString()))).StatusCode);
@@ -199,7 +200,7 @@ public class LinkTests
         var found = await (await host.Client.GetAsync($"{Tasks}/by-link?kind={DocumentKind}&id={documentId}")).ReadAsync<List<TaskSummaryDto>>();
 
         Assert.Equal(new[] { renew.Id, read.Id }, found.Select(t => t.Id));
-        await TasksHost.AssertBadRequestAsync(await host.Client.GetAsync($"{Tasks}/by-link?kind=People.Person&id=1"), "kind");
+        await TasksHost.AssertBadRequestAsync(await host.Client.GetAsync($"{Tasks}/by-link?kind=Journal.Entry&id=1"), "kind");
         var queried = await host.Factory.WithScopeAsync(services =>
             services.GetRequiredService<ITaskQueries>().ListByLinkAsync(DocumentKind, documentId.ToString()));
         Assert.Equal(new[] { renew.Id, read.Id }, queried.Select(t => t.Id));
@@ -293,6 +294,38 @@ public class LinkTests
         Assert.Empty((await host.GetAsync(task.Id)).Links);
         Assert.Equal(1, await host.WithDbAsync(db => db.Set<InboxEntry>()
             .CountAsync(entry => entry.Consumer == TaskItemLinksConsumer.InboxName)));
+    }
+
+    [Fact]
+    public async Task ALink_ToAPerson_IsCheckedWithThePeopleModule_ShowsOnThePerson_AndGoesWhenThePersonIsDeleted()
+    {
+        var (host, finance, _) = await StartAsync();
+        await using var _host = host;
+        await using var _finance = finance;
+        var created = await host.Client.PostAsJsonAsync("/api/people", new CreatePersonRequest("Marco Silva"), HestiaApiFactory.Json);
+        var person = (await created.ReadAsync<PersonDto>()).Person;
+        var task = await host.CreateAsync("Call Marco", TasksHost.Today.AddDays(2));
+        var links = $"{Tasks}/{task.Id}/links";
+
+        await TasksHost.AssertBadRequestAsync(await host.Client.PostAsJsonAsync(links,
+            new CreateTaskLinkRequest(TaskLinkKinds.PeoplePerson, Guid.NewGuid().ToString())), "targetId");
+        await TasksHost.AssertBadRequestAsync(await host.Client.PostAsJsonAsync(links, new CreateTaskLinkRequest(TaskLinkKinds.PeoplePerson, "1")), "targetId");
+        var response = await host.Client.PostAsJsonAsync(links, new CreateTaskLinkRequest("people.person", person.Id.ToString()));
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.Empty(finance.Requests);
+        var found = await (await host.Client.GetAsync($"{Tasks}/by-link?kind=People.Person&id={person.Id}")).ReadAsync<List<TaskSummaryDto>>();
+        Assert.Equal(new[] { task.Id }, found.Select(t => t.Id));
+        var page = await (await host.Client.GetAsync($"/api/people/{person.Id}")).ReadAsync<PersonDto>();
+        Assert.Equal(new PersonLinkedFromDto(PersonLinkKinds.TasksTask, task.Id.ToString("D"), "Call Marco"), Assert.Single(page.LinkedFrom));
+        var people = await (await host.Client.GetAsync($"/api/people/by-link?kind=Tasks.Task&id={task.Id}")).ReadAsync<List<PersonSummaryDto>>();
+        Assert.Equal(new[] { person.Id }, people.Select(p => p.Id));
+
+        // The person is deleted: the consumer removes the link (with the inbox), and the task stays.
+        Assert.Equal(HttpStatusCode.NoContent, (await host.Client.DeleteAsync($"/api/people/{person.Id}")).StatusCode);
+        await Wait.UntilAsync(() => host.GetAsync(task.Id), t => t.Links.Count == 0);
+        Assert.Equal(1, await host.WithDbAsync(db => db.Set<InboxEntry>()
+            .CountAsync(entry => entry.Consumer == TaskPersonLinksConsumer.InboxName)));
     }
 
     private static async Task DeliverAsync(TasksHost host, object message)

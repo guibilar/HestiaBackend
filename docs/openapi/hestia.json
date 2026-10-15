@@ -4387,7 +4387,8 @@
           "interactionCount",
           "giftIdeas",
           "loans",
-          "links"
+          "links",
+          "linkedFrom"
         ],
         "type": "object",
         "properties": {
@@ -4431,6 +4432,12 @@
             "items": {
               "$ref": "#/components/schemas/PersonLinkDto"
             }
+          },
+          "linkedFrom": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PersonLinkedFromDto"
+            }
           }
         }
       },
@@ -4456,6 +4463,25 @@
           "createdAt": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "PersonLinkedFromDto": {
+        "required": [
+          "kind",
+          "targetId",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
           }
         }
       },

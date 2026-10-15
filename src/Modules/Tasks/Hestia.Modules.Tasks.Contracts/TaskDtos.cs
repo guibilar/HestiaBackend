@@ -144,7 +144,7 @@ public sealed record UpdateTaskRequest(
     int? SortOrder = null);
 
 /// <summary>A new link (<c>POST /api/tasks/{id}/links</c>).</summary>
-/// <param name="Kind">What to link to: <c>Documents.Document</c>, <c>Money.Transaction</c>, or <c>Home.Item</c>.</param>
+/// <param name="Kind">What to link to: <c>Documents.Document</c>, <c>Money.Transaction</c>, <c>Home.Item</c>, or <c>People.Person</c>.</param>
 /// <param name="TargetId">The id of the thing, for example the document id.</param>
 public sealed record CreateTaskLinkRequest(string? Kind, string? TargetId);
 
@@ -167,5 +167,8 @@ public static class TaskLinkKinds
     /// <summary>An item of the Home module (T22): the task is maintenance of that item. The target id is the item id.</summary>
     public const string HomeItem = "Home.Item";
 
-    public static readonly IReadOnlyList<string> All = [DocumentsDocument, MoneyTransaction, HomeItem];
+    /// <summary>A person of the People module (T93), for example "Call Marco". The target id is the person id.</summary>
+    public const string PeoplePerson = "People.Person";
+
+    public static readonly IReadOnlyList<string> All = [DocumentsDocument, MoneyTransaction, HomeItem, PeoplePerson];
 }

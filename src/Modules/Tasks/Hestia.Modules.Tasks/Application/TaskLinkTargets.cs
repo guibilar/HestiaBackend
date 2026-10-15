@@ -1,5 +1,6 @@
 using Hestia.Modules.Documents.Contracts;
 using Hestia.Modules.Home.Contracts;
+using Hestia.Modules.People.Contracts;
 using Hestia.Modules.Tasks.Contracts;
 using Hestia.Platform.Exceptions;
 using Hestia.Platform.Finance;
@@ -8,11 +9,12 @@ namespace Hestia.Modules.Tasks.Application;
 
 /// <summary>
 /// The things that a task can link to (<see cref="TaskLinkKinds"/>), and the check that one exists: a document through
-/// <see cref="IDocumentQueries"/>, a home item through <see cref="IHomeQueries"/> (T22), a finance transaction through
+/// <see cref="IDocumentQueries"/>, a home item through <see cref="IHomeQueries"/> (T22), a person through
+/// <see cref="IPeopleQueries"/> (T93), a finance transaction through
 /// <see cref="IFinanceClient"/> as the signed-in user (D13). The module never reads the tables of another module or the
 /// finance database.
 /// </summary>
-public sealed class TaskLinkTargets(IDocumentQueries documents, IHomeQueries home, IFinanceClient finance)
+public sealed class TaskLinkTargets(IDocumentQueries documents, IHomeQueries home, IPeopleQueries people, IFinanceClient finance)
 {
     /// <summary>The kind and the id in their stored form. Does not check that the thing exists.</summary>
     /// <exception cref="InvalidInputException">An unknown kind, or an id that this kind cannot have.</exception>
@@ -31,6 +33,7 @@ public sealed class TaskLinkTargets(IDocumentQueries documents, IHomeQueries hom
             {
                 TaskLinkKinds.DocumentsDocument => "A document id is a GUID.",
                 TaskLinkKinds.HomeItem => "A home item id is a GUID.",
+                TaskLinkKinds.PeoplePerson => "A person id is a GUID.",
                 _ => "A finance transaction id is a GUID."
             });
         }
@@ -57,6 +60,14 @@ public sealed class TaskLinkTargets(IDocumentQueries documents, IHomeQueries hom
             if (await home.FindItemAsync(id, cancellationToken) is null)
             {
                 throw new InvalidInputException("targetId", "No home item has this id.");
+            }
+            return (linkKind, target);
+        }
+        if (linkKind == TaskLinkKinds.PeoplePerson)
+        {
+            if (await people.FindPersonAsync(id, cancellationToken) is null)
+            {
+                throw new InvalidInputException("targetId", "No person has this id.");
             }
             return (linkKind, target);
         }

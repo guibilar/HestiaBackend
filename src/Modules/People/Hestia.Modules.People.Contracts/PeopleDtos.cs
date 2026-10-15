@@ -9,6 +9,15 @@ public sealed record BirthdayDto(int Month, int Day, int? Year = null);
 /// <summary>A link from a person to something outside the People module, for example a document or a home item.</summary>
 public sealed record PersonLinkDto(Guid Id, string Kind, string TargetId, DateTimeOffset CreatedAt);
 
+/// <summary>
+/// A document or a task that links to the person (kind <c>People.Person</c> in that module, T93). The link belongs to the
+/// document or the task: it is removed there, not on the person.
+/// </summary>
+/// <param name="Kind"><c>Documents.Document</c> or <c>Tasks.Task</c>.</param>
+/// <param name="TargetId">The id of the document or the task.</param>
+/// <param name="Title">The title of the document or the task.</param>
+public sealed record PersonLinkedFromDto(string Kind, string TargetId, string Title);
+
 /// <summary>A person in a list.</summary>
 /// <param name="Id">The person.</param>
 /// <param name="Name">The name.</param>
@@ -107,7 +116,7 @@ public sealed record LoanDto(
     string? Notes,
     DateTimeOffset CreatedAt);
 
-/// <summary>One person, with the contacts, the gift ideas, the loans, and the links.</summary>
+/// <summary>One person, with the contacts, the gift ideas, the loans, and the links (from both sides).</summary>
 /// <param name="Person">The person.</param>
 /// <param name="Notes">Free text, or null.</param>
 /// <param name="Interactions">The latest contacts (at most 20), newest first. All: <c>GET /api/people/{id}/interactions</c>.</param>
@@ -115,6 +124,7 @@ public sealed record LoanDto(
 /// <param name="GiftIdeas">The ideas first (oldest first), then the given gifts (newest first).</param>
 /// <param name="Loans">The open loans first (oldest first), then the returned ones (newest first).</param>
 /// <param name="Links">The links, oldest first.</param>
+/// <param name="LinkedFrom">The documents and the tasks that link to the person (T93): the documents first, each group by title.</param>
 public sealed record PersonDto(
     PersonSummaryDto Person,
     string? Notes,
@@ -122,7 +132,8 @@ public sealed record PersonDto(
     int InteractionCount,
     IReadOnlyList<GiftIdeaDto> GiftIdeas,
     IReadOnlyList<LoanDto> Loans,
-    IReadOnlyList<PersonLinkDto> Links);
+    IReadOnlyList<PersonLinkDto> Links,
+    IReadOnlyList<PersonLinkedFromDto> LinkedFrom);
 
 /// <summary>A new person (<c>POST /api/people</c>). Only the name is required.</summary>
 /// <param name="Name">The name (at most 200 characters).</param>
