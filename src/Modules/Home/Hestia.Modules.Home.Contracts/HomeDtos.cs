@@ -213,6 +213,33 @@ public sealed record CreateItemLinkRequest(string? Kind, string? TargetId);
 /// <param name="TotalValue">The total value of these items.</param>
 public sealed record RoomCountDto(Guid? RoomId, string? Name, int ItemCount, decimal TotalValue);
 
+/// <summary>A category in use and how many items have it (<c>GET /api/home/categories</c>, T89).</summary>
+public sealed record CategoryCountDto(string Name, int Count);
+
+/// <summary>
+/// One maintenance task of one item (<c>GET /api/home/maintenance</c>, T89): an open task linked to the item from either
+/// side. A task linked to two items comes twice.
+/// </summary>
+/// <param name="TaskId">The task.</param>
+/// <param name="Title">The title of the task.</param>
+/// <param name="DueOn">The next due date, or null.</param>
+/// <param name="RepeatEvery">For a repeated task, how many units between two due dates, else null.</param>
+/// <param name="RepeatUnit">For a repeated task, <c>Days</c>, <c>Weeks</c>, <c>Months</c>, or <c>Years</c>, else null.</param>
+/// <param name="LastDoneAt">When the task was last done, or null.</param>
+/// <param name="ItemId">The item.</param>
+/// <param name="ItemName">The name of the item.</param>
+/// <param name="RoomName">The room of the item, or null.</param>
+public sealed record MaintenanceDto(
+    Guid TaskId,
+    string Title,
+    DateOnly? DueOn,
+    int? RepeatEvery,
+    string? RepeatUnit,
+    DateTimeOffset? LastDoneAt,
+    Guid ItemId,
+    string ItemName,
+    string? RoomName);
+
 /// <summary>The numbers of the Home screen (<c>GET /api/home/summary</c>).</summary>
 /// <param name="Date">Today, in the time zone of the module (<c>Home:TimeZone</c>).</param>
 /// <param name="ItemCount">How many items (rows) the home has.</param>

@@ -18,12 +18,10 @@ public sealed class ItemRelations(IDocumentQueries documents, ITaskQueries tasks
     public async Task<List<ItemDocumentDto>> DocumentsAsync(Guid itemId, IEnumerable<ItemLinkDto> links, CancellationToken cancellationToken)
     {
         var found = new Dictionary<Guid, ItemDocumentDto>();
-        foreach (var link in links.Where(l => l.Kind == ItemLinkKinds.DocumentsDocument))
+        // One light query for the item's own links (T89): summaries, without the OCR text.
+        foreach (var document in await documents.ListAsync(Ids(links, ItemLinkKinds.DocumentsDocument), cancellationToken))
         {
-            if (Guid.TryParse(link.TargetId, out var id) && await documents.FindAsync(id, cancellationToken) is { } document)
-            {
-                found[document.Id] = new ItemDocumentDto(document.Id, document.Title, document.Kind.ToString(), document.ExpiresOn);
-            }
+            found[document.Id] = new ItemDocumentDto(document.Id, document.Title, document.Kind.ToString(), document.ExpiresOn);
         }
         foreach (var document in await documents.ListByLinkAsync(HomeItemKind, itemId.ToString("D"), cancellationToken))
         {
@@ -39,13 +37,10 @@ public sealed class ItemRelations(IDocumentQueries documents, ITaskQueries tasks
     public async Task<List<ItemTaskDto>> TasksAsync(Guid itemId, IEnumerable<ItemLinkDto> links, CancellationToken cancellationToken)
     {
         var found = new Dictionary<Guid, ItemTaskDto>();
-        foreach (var link in links.Where(l => l.Kind == ItemLinkKinds.TasksTask))
+        foreach (var task in await tasks.ListAsync(Ids(links, ItemLinkKinds.TasksTask), cancellationToken))
         {
-            if (Guid.TryParse(link.TargetId, out var id) && await tasks.FindAsync(id, cancellationToken) is { } task)
-            {
-                found[task.Id] = new ItemTaskDto(task.Id, task.Title, task.Status.ToString(), task.DueOn, task.Repeat?.Every,
-                    task.Repeat?.Unit.ToString(), task.LastDoneAt);
-            }
+            found[task.Id] = new ItemTaskDto(task.Id, task.Title, task.Status.ToString(), task.DueOn, task.Repeat?.Every,
+                task.Repeat?.Unit.ToString(), task.LastDoneAt);
         }
         foreach (var task in await tasks.ListByLinkAsync(TaskLinkKinds.HomeItem, itemId.ToString("D"), cancellationToken))
         {
@@ -68,12 +63,49 @@ public sealed class ItemRelations(IDocumentQueries documents, ITaskQueries tasks
     {
         IEnumerable<string> targets = kind switch
         {
-            ItemLinkKinds.DocumentsDocument => (await documents.FindAsync(targetId, cancellationToken))?.Links
-                .Where(l => l.Kind == HomeItemKind).Select(l => l.TargetId) ?? [],
-            ItemLinkKinds.TasksTask => (await tasks.FindAsync(targetId, cancellationToken))?.Links
-                .Where(l => l.Kind == TaskLinkKinds.HomeItem).Select(l => l.TargetId) ?? [],
+            ItemLinkKinds.DocumentsDocument => (await documents.ListAsync([targetId], cancellationToken))
+                .SelectMany(d => d.Links).Where(l => l.Kind == HomeItemKind).Select(l => l.TargetId),
+            ItemLinkKinds.TasksTask => (await tasks.ListAsync([targetId], cancellationToken))
+                .SelectMany(t => t.Links).Where(l => l.Kind == TaskLinkKinds.HomeItem).Select(l => l.TargetId),
             _ => []
         };
         return targets.Select(t => Guid.TryParse(t, out var id) ? id : Guid.Empty).Where(id => id != Guid.Empty).Distinct().ToList();
     }
+
+    /// <summary>
+    /// All maintenance (T89): each open task with the items it belongs to, from both sides of the link: the tasks that
+    /// link to an item, and the tasks that items link to (<paramref name="itemLinks"/>: item id and task id).
+    /// </summary>
+    public async Task<List<(TaskSummaryDto Task, Guid ItemId)>> MaintenanceAsync(
+        IReadOnlyList<(Guid ItemId, string TaskId)> itemLinks, CancellationToken cancellationToken)
+    {
+        var pairs = new List<(TaskSummaryDto, Guid)>();
+        foreach (var task in await tasks.ListOpenWithLinkKindAsync(TaskLinkKinds.HomeItem, cancellationToken))
+        {
+            foreach (var link in task.Links.Where(l => l.Kind == TaskLinkKinds.HomeItem))
+            {
+                if (Guid.TryParse(link.TargetId, out var itemId))
+                {
+                    pairs.Add((task, itemId));
+                }
+            }
+        }
+        var taskIds = itemLinks.Select(l => Guid.TryParse(l.TaskId, out var id) ? id : Guid.Empty).Where(id => id != Guid.Empty).ToHashSet();
+        var linked = (await tasks.ListAsync(taskIds, cancellationToken)).Where(t => t.Status == TaskItemStatus.Open).ToDictionary(t => t.Id);
+        foreach (var (itemId, taskId) in itemLinks)
+        {
+            if (Guid.TryParse(taskId, out var id) && linked.TryGetValue(id, out var task))
+            {
+                pairs.Add((task, itemId));
+            }
+        }
+        return pairs.DistinctBy(p => (p.Item1.Id, p.Item2)).ToList();
+    }
+
+    /// <summary>The ids of the links of one kind (a link with a target that is not a GUID is left out).</summary>
+    private static HashSet<Guid> Ids(IEnumerable<ItemLinkDto> links, string kind) =>
+        links.Where(l => l.Kind == kind)
+            .Select(l => Guid.TryParse(l.TargetId, out var id) ? id : Guid.Empty)
+            .Where(id => id != Guid.Empty)
+            .ToHashSet();
 }

@@ -266,6 +266,44 @@ public sealed class ItemService(
         return await ItemReader.SummariesAsync(db, items, cancellationToken);
     }
 
+    /// <summary>The categories in use (T89), by name, with the count of items in each.</summary>
+    public async Task<List<CategoryCountDto>> CategoriesAsync(CancellationToken cancellationToken) =>
+        (await db.Items.AsNoTracking().Where(i => i.Category != null).Select(i => i.Category!).ToListAsync(cancellationToken))
+            .GroupBy(category => category, StringComparer.OrdinalIgnoreCase)
+            .Select(group => new CategoryCountDto(group.First(), group.Count()))
+            .OrderBy(category => category.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    /// <summary>
+    /// All maintenance (T89): the open tasks linked to an item from either side, by due date (no date last), then by
+    /// title and item name.
+    /// </summary>
+    public async Task<List<MaintenanceDto>> MaintenanceAsync(CancellationToken cancellationToken)
+    {
+        var itemLinks = (await db.Links.AsNoTracking()
+                .Where(l => l.Kind == ItemLinkKinds.TasksTask)
+                .Select(l => new { l.ItemId, l.TargetId })
+                .ToListAsync(cancellationToken))
+            .Select(l => (l.ItemId, l.TargetId))
+            .ToList();
+        var pairs = await relations.MaintenanceAsync(itemLinks, cancellationToken);
+        var itemIds = pairs.Select(p => p.ItemId).ToHashSet();
+        var items = await db.Items.AsNoTracking()
+            .Where(i => itemIds.Contains(i.Id))
+            .Select(i => new { i.Id, i.Name, Room = i.RoomId == null ? null : db.Rooms.Where(r => r.Id == i.RoomId).Select(r => r.Name).FirstOrDefault() })
+            .ToDictionaryAsync(i => i.Id, cancellationToken);
+        return pairs
+            .Where(p => items.ContainsKey(p.ItemId))
+            .Select(p => new MaintenanceDto(p.Task.Id, p.Task.Title, p.Task.DueOn, p.Task.Repeat?.Every, p.Task.Repeat?.Unit.ToString(),
+                p.Task.LastDoneAt, p.ItemId, items[p.ItemId].Name, items[p.ItemId].Room))
+            .OrderBy(m => m.DueOn is null)
+            .ThenBy(m => m.DueOn)
+            .ThenBy(m => m.Title, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(m => m.ItemName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(m => m.TaskId)
+            .ToList();
+    }
+
     /// <summary>The numbers of the Home screen: the item count, the total value, the rooms, and the warranties that end soon.</summary>
     public async Task<HomeSummaryDto> SummaryAsync(CancellationToken cancellationToken)
     {

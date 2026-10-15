@@ -603,6 +603,8 @@ the purchase price, else 0, multiplied by the quantity. The totals and the expor
 | `GET /items/by-link?kind=Documents.Document&id=<document id>` | The items of one thing: the items that link to it, and the items that the document or the task links to. |
 | `GET /items/export.csv?room=&category=&tag=&q=&warranty=` | The items (all, or the list filters) as CSV. |
 | `GET /summary` | `date`, `itemCount`, `totalValue`, `rooms` (each room, then one entry with `roomId` null for the items without a room), `warrantiesEnding` (30 days). |
+| `GET /maintenance` | All maintenance (T89): the open tasks linked to an item from either side (`taskId`, `title`, `dueOn`, the repeat, `lastDoneAt`, `itemId`, `itemName`, `roomName`), by due date. |
+| `GET /categories` | The categories in use, by name, with `count` (T89). For a category picker. |
 
 ```bash
 curl -b cookies -H 'Content-Type: application/json' -d '{"name":"Kitchen"}' http://localhost:5097/api/home/rooms

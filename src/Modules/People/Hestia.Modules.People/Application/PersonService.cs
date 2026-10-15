@@ -260,8 +260,8 @@ public sealed class PersonService(
     {
         IEnumerable<string> targets = kind switch
         {
-            PersonLinkKinds.DocumentsDocument => (await documents.FindAsync(targetId, cancellationToken))?.Links
-                .Where(l => l.Kind == DocumentLinkKinds.PeoplePerson).Select(l => l.TargetId) ?? [],
+            PersonLinkKinds.DocumentsDocument => (await documents.ListAsync([targetId], cancellationToken))
+                .SelectMany(d => d.Links).Where(l => l.Kind == DocumentLinkKinds.PeoplePerson).Select(l => l.TargetId),
             PersonLinkKinds.TasksTask => (await tasks.FindAsync(targetId, cancellationToken))?.Links
                 .Where(l => l.Kind == TaskLinkKinds.PeoplePerson).Select(l => l.TargetId) ?? [],
             _ => []

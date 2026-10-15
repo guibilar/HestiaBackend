@@ -333,6 +333,24 @@ public sealed class TaskService(
         return await SummariesAsync(InListOrder(tasks), cancellationToken);
     }
 
+    /// <summary>The tasks with these ids, in list order (T89).</summary>
+    public async Task<IReadOnlyList<TaskSummaryDto>> ListByIdsAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken)
+    {
+        if (ids.Count == 0)
+        {
+            return [];
+        }
+        return await SummariesAsync(InListOrder(db.Tasks.AsNoTracking().Where(t => ids.Contains(t.Id))), cancellationToken);
+    }
+
+    /// <summary>The open tasks with a link of <paramref name="kind"/> (T89), in list order.</summary>
+    public async Task<IReadOnlyList<TaskSummaryDto>> ListOpenWithLinkKindAsync(string kind, CancellationToken cancellationToken)
+    {
+        var tasks = db.Tasks.AsNoTracking()
+            .Where(t => t.Status == TaskItemStatus.Open && t.Links.Any(l => l.Kind == kind));
+        return await SummariesAsync(InListOrder(tasks), cancellationToken);
+    }
+
     /// <summary>The counts of open tasks for the badges: due today, overdue, and upcoming.</summary>
     public async Task<TaskCountsDto> CountAsync(CancellationToken cancellationToken)
     {
@@ -384,4 +402,10 @@ public sealed class TaskQueries(TaskService tasks) : ITaskQueries
             return [];
         }
     }
+
+    public Task<IReadOnlyList<TaskSummaryDto>> ListAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken = default) =>
+        tasks.ListByIdsAsync(ids, cancellationToken);
+
+    public Task<IReadOnlyList<TaskSummaryDto>> ListOpenWithLinkKindAsync(string kind, CancellationToken cancellationToken = default) =>
+        tasks.ListOpenWithLinkKindAsync(kind, cancellationToken);
 }

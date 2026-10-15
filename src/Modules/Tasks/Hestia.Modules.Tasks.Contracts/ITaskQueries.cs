@@ -15,4 +15,13 @@ public interface ITaskQueries
     /// An unknown kind gives an empty list.
     /// </summary>
     Task<IReadOnlyList<TaskSummaryDto>> ListByLinkAsync(string kind, string targetId, CancellationToken cancellationToken = default);
+
+    /// <summary>The tasks with these ids, in list order (T89). Unknown ids are left out.</summary>
+    Task<IReadOnlyList<TaskSummaryDto>> ListAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The open tasks with at least one link of <paramref name="kind"/>, for example all maintenance (<c>Home.Item</c>,
+    /// T89), in list order. Each summary has its links, so the caller sees the targets.
+    /// </summary>
+    Task<IReadOnlyList<TaskSummaryDto>> ListOpenWithLinkKindAsync(string kind, CancellationToken cancellationToken = default);
 }

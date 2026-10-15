@@ -15,4 +15,10 @@ public interface IDocumentQueries
     /// An unknown kind gives an empty list.
     /// </summary>
     Task<IReadOnlyList<DocumentSummaryDto>> ListByLinkAsync(string kind, string targetId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The documents with these ids, without the OCR text (T89): one query for many documents. Unknown ids are left out;
+    /// the order is newest first.
+    /// </summary>
+    Task<IReadOnlyList<DocumentSummaryDto>> ListAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken = default);
 }
