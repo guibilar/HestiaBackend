@@ -32,7 +32,7 @@ public class ConsumerRetryTests
         await Eventually(() => Task.FromResult(FlakyTestConsumer.AttemptsOf(message)), attempts => attempts >= 2);
         await Task.Delay(500);
         Assert.Equal(2, FlakyTestConsumer.AttemptsOf(message));
-        Assert.Null(logs.Find(MovedToErrorQueue));
+        Assert.Null(logs.Find(MovedToErrorQueue).FirstOrDefault()?.Message);
     }
 
     [Fact]
@@ -44,7 +44,7 @@ public class ConsumerRetryTests
 
         await PublishAsync(factory, message);
 
-        var line = await Eventually(() => Task.FromResult(logs.Find(MovedToErrorQueue)), found => found is not null);
+        var line = await Eventually(() => Task.FromResult(logs.Find(MovedToErrorQueue).FirstOrDefault()?.Message), found => found is not null);
         Assert.NotNull(line);
         await Task.Delay(500);
         Assert.Equal(1, FlakyTestConsumer.AttemptsOf(message));
@@ -59,7 +59,7 @@ public class ConsumerRetryTests
 
         await PublishAsync(factory, message);
 
-        var line = await Eventually(() => Task.FromResult(logs.Find(MovedToErrorQueue)), found => found is not null);
+        var line = await Eventually(() => Task.FromResult(logs.Find(MovedToErrorQueue).FirstOrDefault()?.Message), found => found is not null);
         Assert.NotNull(line);
         Assert.Equal(ConsumerRetries.Delays.Length + 1, FlakyTestConsumer.AttemptsOf(message));
     }
@@ -115,7 +115,7 @@ public class ConsumerRetryTests
                 await db.Set<InboxEntry>().CountAsync(entry => entry.EventId == message.EventId));
         });
         Assert.Equal((1, 1), (changes, inbox));
-        Assert.Null(logs.Find(MovedToErrorQueue));
+        Assert.Null(logs.Find(MovedToErrorQueue).FirstOrDefault()?.Message);
     }
 
     private static HestiaApiFactory Start(LogCapture logs)
@@ -146,30 +146,6 @@ public class ConsumerRetryTests
                 return value;
             }
             await Task.Delay(50);
-        }
-    }
-
-    /// <summary>Keeps every log line of the host.</summary>
-    private sealed class LogCapture : ILoggerProvider
-    {
-        private readonly ConcurrentQueue<string> _lines = new();
-
-        public string? Find(string text) => _lines.FirstOrDefault(line => line.Contains(text, StringComparison.Ordinal));
-
-        public ILogger CreateLogger(string categoryName) => new Logger(_lines);
-
-        public void Dispose()
-        {
-        }
-
-        private sealed class Logger(ConcurrentQueue<string> lines) : ILogger
-        {
-            public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
-
-            public bool IsEnabled(LogLevel logLevel) => true;
-
-            public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
-                Func<TState, Exception?, string> formatter) => lines.Enqueue(formatter(state, exception));
         }
     }
 }

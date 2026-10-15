@@ -154,8 +154,8 @@ public sealed class TodayOptions
     public const string SectionName = "Today";
 
     /// <summary>
-    /// IANA time zone (for example America/Edmonton) that decides which day it is. Use the same zone as finance
-    /// (<c>Reports:TimeZone</c>), so that "this month" is the same month. Docker sets it from <c>TZ</c>.
+    /// IANA time zone (for example America/Edmonton) of this module. Without a value, the shared Hestia:TimeZone (T85,
+    /// Docker: TZ) applies; set it here only to override that.
     /// </summary>
     public string TimeZone { get; set; } = "UTC";
 

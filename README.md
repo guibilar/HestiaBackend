@@ -84,6 +84,12 @@ as in `appsettings.Development.json`). In Development, the host applies the migr
 It also makes the account `dev` with the password `development-only`, and uses a gateway signing key that is in
 `appsettings.Development.json` (for development only).
 
+**Time zone (T85).** One setting decides which day it is for all modules: `Hestia:TimeZone` (IANA, for example
+`America/Edmonton`; appsettings: `America/Toronto`; Docker: `TZ` in `.env`). Use the same zone as finance
+(`Reports:TimeZone`). A module setting (`Today:TimeZone`, `Alerts:TimeZone`, `Tasks:TimeZone`, `Home:TimeZone`,
+`People:TimeZone`) still works as an override; the host logs the zone at start and a warning for each override that
+differs.
+
 ```bash
 dotnet run --project src/Hestia.Api        # http://localhost:5097
 curl http://localhost:5097/health/ready
@@ -293,7 +299,7 @@ logic is in one place, here, and not in the web and Android clients.
 
 | Setting (`Today` section) | Default | Description |
 | --- | --- | --- |
-| `TimeZone` | `America/Toronto` | The IANA time zone that decides which day it is. Use the same zone as finance (`Reports:TimeZone`), so "this month" is the same month. Docker: `TZ` in `.env`. |
+| `TimeZone` | (shared) | An override of `Hestia:TimeZone` (see [Run locally](#run-locally)). Leave it empty. |
 | `CacheDuration` | `00:00:30` | How long a complete answer stays for a user. `00:00:00` turns the cache off. |
 | `ProviderTimeout` | `00:00:15` | How long the host waits for one module's cards. |
 
@@ -338,7 +344,7 @@ module rules (IAlertSource) ──check──> alert store (raise, update, resol
 
 | Setting (`Alerts` section) | Default | Description |
 | --- | --- | --- |
-| `TimeZone` | `America/Toronto` | The IANA time zone that decides which day it is for the rules. Use the same zone as Today and finance. Docker: `TZ` in `.env`. |
+| `TimeZone` | (shared) | An override of `Hestia:TimeZone`. Leave it empty. |
 | `CheckInterval` | `00:15:00` | How often the host checks all rules without a request. |
 | `RefreshWait` | `00:00:10` | How long a request for fresh alerts waits for the check. Keep it under `Today:ProviderTimeout`. |
 | `KeepResolvedDays` | `30` | How long a resolved alert stays in the table. |
@@ -513,8 +519,8 @@ curl -b cookies -X POST http://localhost:5097/api/tasks/<id>/done
 curl -b cookies 'http://localhost:5097/api/tasks?due=overdue'
 ```
 
-**Days.** "Today", "overdue", and the day a task was done are in the time zone `Tasks:TimeZone` (Docker: from `TZ`, as
-`Today:TimeZone` and `Alerts:TimeZone`). There are no times of day. Use the same zone for all three.
+**Days.** "Today", "overdue", and the day a task was done are in the shared time zone `Hestia:TimeZone` (Docker: from
+`TZ`). There are no times of day.
 
 **Done and repeat.**
 
@@ -554,7 +560,7 @@ date that was done and, for a repeated task, `NextDueOn`), `TaskReopened`, and `
 
 | Setting (`Tasks` section) | Default | Description |
 | --- | --- | --- |
-| `TimeZone` | `UTC` (appsettings: `America/Toronto`) | The IANA time zone of the days. Docker: `TZ`. |
+| `TimeZone` | (shared) | An override of `Hestia:TimeZone`. Leave it empty. |
 | `UpcomingDays` | `7` | The days after today that `due=upcoming` and the summary count. |
 | `MaxOverdueAlerts` | `5` | The most overdue tasks with an alert each. |
 
@@ -633,7 +639,7 @@ Today tile in v1.
 
 | Setting (`Home` section) | Default | Description |
 | --- | --- | --- |
-| `TimeZone` | `UTC` (appsettings: `America/Toronto`) | The IANA time zone of the days. Docker: `TZ`. |
+| `TimeZone` | (shared) | An override of `Hestia:TimeZone`. Leave it empty. |
 | `WarrantySoonDays` | `30` | The days of "ends soon": the alerts, `warranty=expiring`, and the summary. |
 
 **Backups.** The `home` schema is in the Hestia database, so the backup job (T24) dumps it. The CI backup check restores
@@ -691,13 +697,13 @@ and `people.loan-overdue.<loan id>` (an open loan after its due day). Each check
 
 | Setting (`People` section) | Default | Description |
 | --- | --- | --- |
-| `TimeZone` | `UTC` (appsettings: `America/Toronto`) | The IANA time zone of the days. Docker: `TZ`. |
+| `TimeZone` | (shared) | An override of `Hestia:TimeZone`. Leave it empty. |
 | `BirthdayAlertDays` | `7` | A birthday in these days is an alert. |
 | `UpcomingDays` | `30` | The birthdays in the summary. |
 
 **Backups.** The `people` schema is in the Hestia database. The CI backup check restores a person with a contact.
 
-### OpenAPI document
+## OpenAPI document
 
 The host describes the module endpoints (not the finance paths) at `/openapi/v1.json`, with `/api/Auth/*`
 (`CurrentUserDto` has `username` and `scope`). The Angular and Kotlin clients can generate their models from it. Like every endpoint, it needs a signed-in user, for example the read-only token:

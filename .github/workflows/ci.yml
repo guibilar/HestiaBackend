@@ -197,7 +197,7 @@ jobs:
           echo "$body"
           echo "$body" | jq -e 'has("stub") | not'
       # T08: the Today cards. The stub answers every finance report with its echo, so the account list does not
-      # load and the Money module is "Partial"; the four tiles are there. The host found its time zone (Today__TimeZone).
+      # load and the Money module is "Partial"; the four tiles are there. The host found its time zone (Hestia__TimeZone, T85).
       - name: Today answers with the Money cards first
         run: |
           body=$(curl -sf -H "Cookie: $SESSION_COOKIE" http://localhost:5097/api/today)

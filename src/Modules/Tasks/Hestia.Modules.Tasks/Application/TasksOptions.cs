@@ -8,8 +8,8 @@ public sealed class TasksOptions
     public const string SectionName = "Tasks";
 
     /// <summary>
-    /// IANA time zone (for example America/Edmonton) that decides which day it is: "today", "overdue", and the day a task
-    /// was done. Use the same zone as Today and Alerts. Docker sets it from <c>TZ</c>.
+    /// IANA time zone (for example America/Edmonton) of this module. Without a value, the shared Hestia:TimeZone (T85,
+    /// Docker: TZ) applies; set it here only to override that.
     /// </summary>
     public string TimeZone { get; set; } = "UTC";
 

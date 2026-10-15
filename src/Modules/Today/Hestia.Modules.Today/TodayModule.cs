@@ -2,6 +2,7 @@ using Hestia.Modules.Today.Application;
 using Hestia.Modules.Today.Application.Finance;
 using Hestia.Modules.Today.Contracts;
 using Hestia.Modules.Today.Endpoints;
+using Hestia.Platform.Hosting;
 using Hestia.Platform.Modules;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
@@ -32,6 +33,8 @@ public static class TodayModuleExtensions
     {
         services.AddOptions<TodayOptions>()
             .Bind(configuration.GetSection(TodayOptions.SectionName))
+            // The shared zone (Hestia:TimeZone, T85), unless Today:TimeZone overrides it.
+            .PostConfigure(options => options.TimeZone = HestiaTimeZone.For(configuration, TodayOptions.SectionName))
             .Validate(options => options.IsValid(),
                 "Today: set Today:TimeZone to an IANA time zone (for example America/Edmonton), Today:CacheDuration to " +
                 "zero or more, and Today:ProviderTimeout to more than zero.")

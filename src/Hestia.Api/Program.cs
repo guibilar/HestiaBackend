@@ -41,6 +41,17 @@ builder.Services.AddHealthChecks()
 var app = builder.Build();
 
 app.Logger.LogInformation("Modules: {Modules}", string.Join(", ", modules.Select(module => module.Name)));
+// T85: one time zone for all modules. A module that overrides it gets a warning, as a different zone changes its "today".
+var timeZone = HestiaTimeZone.Shared(app.Configuration);
+app.Logger.LogInformation("Time zone: {TimeZone} ({Setting})", timeZone, HestiaTimeZone.SettingKey);
+foreach (var module in modules)
+{
+    if (HestiaTimeZone.Override(app.Configuration, module.Name) is { } zone && zone != timeZone)
+    {
+        app.Logger.LogWarning("{Module}:TimeZone is {Zone}, not the shared {TimeZone}. Remove it unless the module must use another zone",
+            module.Name, zone, timeZone);
+    }
+}
 
 if (app.Configuration.GetValue<bool>("Database:MigrateOnStartup"))
 {
