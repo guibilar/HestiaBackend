@@ -503,7 +503,7 @@ order inside a day, an optional repeat, completions, and links (to documents and
 | Endpoint | Description |
 | --- | --- |
 | `POST /` | A new task, JSON: `title` (required, at most 200 characters), `notes`, `dueOn` (`yyyy-MM-dd`), `tags`, `sortOrder`, `repeat` (`{ "every": 4, "unit": "Days", "mode": "FromCompletion" }`), `links` (`[{ "kind": "Documents.Document", "targetId": "<id>" }]`). Answers 201. |
-| `GET /?status=&tag=&due=&q=&page=1&pageSize=20` | A page of tasks: by due date (tasks without one last), then `sortOrder`, then the oldest first. `status`: `Open` or `Done`. `due`: `today`, `overdue` (open and due before today), `upcoming` (the next 7 days after today), `none` (no due date). `q`: words in the title, the notes, or the tags. |
+| `GET /?status=&tag=&due=&q=&page=1&pageSize=20` | A page of tasks: by due date (tasks without one last), then `sortOrder`, then the oldest first; with `status=Done`, the last done first (T86). `status`: `Open` or `Done`. `due`: `today`, `overdue` (open and due before today), `upcoming` (the next 7 days after today), `later` (after those days, T86), `none` (no due date). `q`: words in the title, the notes, or the tags. |
 | `GET /{id}` | One task, with its last 10 completions (newest first). |
 | `PUT /{id}` | New details (all of them, JSON, as for `POST /` without `links`). The status, the completions, and the links stay. |
 | `DELETE /{id}` | Deletes the task, its completions, and its links. |
@@ -512,6 +512,7 @@ order inside a day, an optional repeat, completions, and links (to documents and
 | `POST /{id}/links`, `DELETE /{id}/links/{linkId}` | A link, `{ "kind": "Documents.Document", "targetId": "<document id>" }` or `Money.Transaction`. |
 | `GET /by-link?kind=Documents.Document&id=<document id>` | The tasks of one thing. |
 | `GET /summary` | The counts of open tasks: `dueToday`, `overdue`, `upcoming` (7 days), with `date`. For the badges. |
+| `GET /tags` | The tags in use, by name, with `count` (open and done tasks, T86). For a tag filter. |
 
 ```bash
 curl -b cookies -H 'Content-Type: application/json' \
@@ -564,7 +565,7 @@ date that was done and, for a repeated task, `NextDueOn`), `TaskReopened`, and `
 | Setting (`Tasks` section) | Default | Description |
 | --- | --- | --- |
 | `TimeZone` | (shared) | An override of `Hestia:TimeZone`. Leave it empty. |
-| `UpcomingDays` | `7` | The days after today that `due=upcoming` and the summary count. |
+| `UpcomingDays` | `7` | The days after today that `due=upcoming` and the summary count (`due=later` is after them). |
 | `MaxOverdueAlerts` | `5` | The most overdue tasks with an alert each. |
 
 **Backups.** The `tasks` schema is in the Hestia database, so the backup job (T24) dumps it with the other modules. The
