@@ -384,6 +384,7 @@ upload ──> files to the volume (by SHA-256) + rows and DocumentAdded (one sa
 | `PUT /{id}` | New details (all of them, JSON). The files stay. |
 | `DELETE /{id}` | Deletes the document, its links, and its files. |
 | `GET /{id}/files/{fileId}` | The file, as a download. `?inline=true` shows it in the browser. |
+| `GET /{id}/files/{fileId}/thumbnail` | A JPEG preview, at most 480 pixels on its longest side (T61): the first page of a PDF (`pdftoppm`), or the photo the right way up (SkiaSharp; HEIC through `heif-convert`). Made at the first request and kept in `thumbs/` on the documents volume; `documents-clean-files` removes the thumbnails of unused files. 404 when no preview can be made. |
 | `POST /{id}/ocr` | Runs the OCR again (202, `ocrStatus` `Pending`). |
 | `POST /{id}/links`, `DELETE /{id}/links/{linkId}` | A link, `{ "kind": "Money.Transaction", "targetId": "<transaction id>" }`, `Home.Item` (T22), or `People.Person` (T93). |
 | `POST /by-link/counts` | `{ kind, targetIds }` (at most 200): how many documents link to each (0 included), for an icon on transaction rows (T72). A read-only query: the read-only user can call it. |

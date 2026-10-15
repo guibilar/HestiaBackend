@@ -26,6 +26,10 @@
 
   <ItemGroup Label="Gateway">
     <PackageVersion Include="Yarp.ReverseProxy" Version="2.3.0" />
+    <!-- Document thumbnails (T61): decode and scale photos. MIT. The NoDependencies native build runs on the
+         aspnet image without extra packages. -->
+    <PackageVersion Include="SkiaSharp" Version="4.153.1" />
+    <PackageVersion Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="4.153.1" />
   </ItemGroup>
 
   <!-- Events (D7, T04). Wolverine is MIT-licensed. -->

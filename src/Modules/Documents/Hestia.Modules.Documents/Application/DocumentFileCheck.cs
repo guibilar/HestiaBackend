@@ -58,12 +58,14 @@ public sealed class DocumentFileCheck(DocumentStorage storage, IServiceScopeFact
             var file = new FileInfo(path);
             var key = Path.GetRelativePath(storage.Root, path).Replace('\\', '/');
             var inTemp = IsTemp(key);
-            if (!inTemp && !DocumentStorage.IsKey(key))
+            // A thumbnail (T61) is unused when its file is.
+            var source = DocumentStorage.KeyOfThumbnail(key) ?? key;
+            if (!inTemp && !DocumentStorage.IsKey(source))
             {
                 skipped.Add(key);
                 continue;
             }
-            if ((inTemp || !used.Contains(key)) && file.LastWriteTimeUtc < before)
+            if ((inTemp || !used.Contains(source)) && file.LastWriteTimeUtc < before)
             {
                 unused.Add(new UnusedFile(key, file));
             }
@@ -133,9 +135,10 @@ public sealed class DocumentFileCheck(DocumentStorage storage, IServiceScopeFact
         {
             return true;
         }
+        var source = DocumentStorage.KeyOfThumbnail(unused.Key) ?? unused.Key;
         await using var scope = scopes.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<DocumentsDbContext>();
-        return !await db.Files.AsNoTracking().AnyAsync(f => f.StorageKey == unused.Key, cancellationToken);
+        return !await db.Files.AsNoTracking().AnyAsync(f => f.StorageKey == source, cancellationToken);
     }
 
     private static bool IsTemp(string key) => key.StartsWith(DocumentStorage.TempFolder + "/", StringComparison.Ordinal);

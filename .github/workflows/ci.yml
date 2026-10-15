@@ -271,6 +271,18 @@ jobs:
           echo "$output" | grep -q "missing   $key (document "
           output=$(docker compose run --rm -T hestia-api documents-clean-files --check-missing)
           echo "$output" | grep -q 'No missing files.'
+      # T61: thumbnails in the image: the first page of the PDF (pdftoppm) and the PNG (SkiaSharp, its native library).
+      - name: Document thumbnails in the image
+        run: |
+          id=$(curl -sf -H "Cookie: $SESSION_COOKIE" 'http://localhost:5097/api/documents?q=toaster' | jq -r '.items[0].id')
+          body=$(curl -sf -H "Cookie: $SESSION_COOKIE" "http://localhost:5097/api/documents/$id")
+          for file in $(echo "$body" | jq -r '.files[].id'); do
+            curl -sf -D headers.txt -o thumbnail.jpg -H "Cookie: $SESSION_COOKIE" \
+              "http://localhost:5097/api/documents/$id/files/$file/thumbnail"
+            grep -qi '^content-type: image/jpeg' headers.txt
+            file thumbnail.jpg | tee /dev/stderr | grep -q 'JPEG image data'
+          done
+          docker exec hestia-api sh -c 'find /data/documents/thumbs -type f | wc -l' | grep -qx 2
       # T19: a repeated task in the image: create, done (the due date moves), undo, the summary, and the Today tile.
       - name: Tasks add, done, undo, summary, and the Today tile
         run: |
