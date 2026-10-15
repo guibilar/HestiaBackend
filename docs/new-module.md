@@ -85,9 +85,10 @@ A module event tells other modules that something changed (D7). See the README, 
    Do not set `EventId` yourself: each new event object gets a new one.
 2. Raise it on the module's DbContext before the save: `db.RaiseEvent(new DocumentAdded(...))`. The host publishes it
    after the commit, and never when the save fails or the transaction rolls back.
-3. **Choose the mode.** By default, the event goes to the consumers in memory after the commit. If the process stops
-   between the commit and the publish, the event is lost. When a lost event leaves other data wrong (for example, the
-   timeline or the search index), use **durable events** (T38):
+3. **Use durable events** (T38; required since T78). Without them, the event goes to the consumers in memory after the
+   commit, and it is lost if the process stops before the consumers ran, or after the retries of a consumer that fails.
+   `DurableModuleEventsTests` (`tests/Hestia.Api.Tests`) fails for a module with events but without durable events.
+   Only the Sample module keeps the in-memory mode, to show it.
    1. In `AddDocumentsModule`, register the DbContext with the outbox:
       `services.AddModuleDbContext<DocumentsDbContext>(DocumentsDbContext.SchemaName, database => database.UseDurableEvents());`
    2. In `OnModelCreating`, call `modelBuilder.AddEventOutbox();` (namespace `Hestia.Platform.Events`). Then add a

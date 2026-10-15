@@ -207,8 +207,9 @@ internal sealed class HestiaEventsSetup(
 /// a transient PostgreSQL error, or the end of the retries of the EF Core execution strategy.</item>
 /// <item>After the last try, and at once for all other errors (a bug does not go away with a retry), Wolverine moves the
 /// message to the error queue and logs an error ("was moved to the error queue"). RabbitMQ: the dead-letter queue of the
-/// broker. A local queue (module events): the message is dropped after the error log. The module outbox sender
-/// (<c>InvokeAsync</c>) gets the exception instead, and keeps the row for its own later try (T38).</item>
+/// broker. A local queue (in-memory module events, only the Sample module since T78): the message is dropped after the
+/// error log. The module outbox sender (<c>InvokeAsync</c>, durable events) gets the exception instead, and keeps the
+/// row for its own later try (T38); <c>retry-outbox</c> sends a row again after too many tries.</item>
 /// <item>A retry runs all consumers of the event again (Wolverine combines them in one handler). So every consumer that
 /// changes data uses the inbox (T36).</item>
 /// </list>
