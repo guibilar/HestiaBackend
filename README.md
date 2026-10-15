@@ -924,7 +924,8 @@ The finance service uses the events from the NuGet package `Hestia.Contracts`, o
 
 - On `main`: the version in `src/Hestia.Contracts/Hestia.Contracts.csproj` (`VersionPrefix`), once. A version that exists is skipped.
 - On a pull request that changes `src/Hestia.Contracts`: a prerelease, `<version>-pr.<number>.<run>`, for a finance
-  pull request that needs the new contracts before this one merges.
+  pull request that needs the new contracts before this one merges. Every push to such a pull request publishes one
+  (T51), also a push that does not touch the contracts; the job writes the version as a notice.
 
 When you change a contract, increase `VersionPrefix`, and follow the rules in `IIntegrationEvent`: add a property with a
 default value, or make a new event type. `Hestia.Contracts` must not reference other packages or projects (the
