@@ -24,6 +24,9 @@ public static class HestiaDatabase
     public static void ConfigureNpgsql(NpgsqlDbContextOptionsBuilder npgsql, string schema)
     {
         npgsql.MigrationsHistoryTable(MigrationsHistoryTable, schema);
+        // A document with its files and its links (and the same in other modules) in one SQL query repeats each file
+        // once per link. Split queries load each collection on its own, and EF stops warning about it on every request.
+        npgsql.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery);
         npgsql.EnableRetryOnFailure(
             maxRetryCount: 5,
             maxRetryDelay: TimeSpan.FromSeconds(10),
