@@ -117,8 +117,8 @@ public sealed class AlertsApiTests
         var budgetKey = $"money.budget-over.{FinanceData.GroceriesId}";
         var first = Assert.Single((await GetAlertsAsync(client)).Alerts, alert => alert.Id == budgetKey);
 
-        // The budget is under its limit now.
-        SetBudgets(data, FinanceData.BudgetJson(FinanceData.GroceriesId, "Groceries", 150m, 135m, 90m));
+        // The budget is under its limit now (and under 80 %: no warning).
+        SetBudgets(data, FinanceData.BudgetJson(FinanceData.GroceriesId, "Groceries", 150m, 100m, 66.67m));
         clock.Now = FinanceData.Now.AddMinutes(10);
         var list = await GetAlertsAsync(client, refresh: true);
 
@@ -212,9 +212,10 @@ public sealed class AlertsApiTests
         await using var factory = Start(finance, new TestClock(FinanceData.Now));
         var client = factory.CreateClient();
         var budgetId = Guid.NewGuid();
+        var fuelId = Guid.NewGuid();
         var limit = new BudgetLimitReached(budgetId, "Dining", BudgetLimitReached.LimitPercent, 500m, 520m,
             new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 30), FinanceData.Now);
-        var warning = new BudgetLimitReached(Guid.NewGuid(), "Fuel", BudgetLimitReached.WarningPercent, 200m, 165m,
+        var warning = new BudgetLimitReached(fuelId, "Fuel", BudgetLimitReached.WarningPercent, 200m, 165m,
             new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 30), FinanceData.Now);
 
         await DeliverAsync(factory, limit);
@@ -222,16 +223,49 @@ public sealed class AlertsApiTests
         await DeliverAsync(factory, warning);
 
         var rows = await RowsAsync(factory);
-        var row = Assert.Single(rows);
-        Assert.Equal(($"money.budget-over.{budgetId}", FinanceAlertSource.SourceName, (DateTimeOffset?)null), (row.Key, row.Source, row.ResolvedAt));
+        Assert.Equal(
+            new[] { $"money.budget-over.{budgetId}", $"money.budget-warning.{fuelId}" }.Order(StringComparer.Ordinal),
+            rows.Select(row => row.Key).Order(StringComparer.Ordinal));
+        Assert.All(rows, row => Assert.Equal((FinanceAlertSource.SourceName, (DateTimeOffset?)null), (row.Source, row.ResolvedAt)));
         Assert.Equal(1, await InboxRowsAsync(factory, limit.EventId, FinanceAlertsConsumer.InboxName));
 
         var list = await GetAlertsAsync(client);
-        var alert = Assert.Single(list.Alerts);
+        Assert.Equal(2, list.Alerts.Count);
+        // Over its limit comes first.
+        var alert = list.Alerts[0];
         Assert.Equal(("{budget} is over its limit ({used} used)", AlertSeverity.Bad), (alert.Text, alert.Severity));
         Assert.Equal((AlertValue.Plain("Dining"), AlertValue.Percent(104m)), (alert.Values["budget"], alert.Values["used"]));
+        var nearly = list.Alerts[1];
+        Assert.Equal(("budget-warning", "{budget} is nearly used up ({used} used, {left} left)", AlertSeverity.Warning),
+            (nearly.Kind, nearly.Text, nearly.Severity));
+        Assert.Equal((AlertValue.Percent(83m), AlertValue.Money(35m)), (nearly.Values["used"], nearly.Values["left"]));
         // No check worked, but the module has an alert: Partial, not Failed.
         Assert.Equal(AlertModuleStatus.Partial, Assert.Single(list.Modules).Status);
+    }
+
+    [Fact]
+    public async Task ABudgetNearItsLimit_IsAWarning_ThatTheLimitReplaces()
+    {
+        var data = new FinanceData();
+        SetBudgets(data, FinanceData.BudgetJson(FinanceData.GroceriesId, "Groceries", 150m, 126m, 84m));
+        await using var finance = await FakeFinance.StartAsync(data.RespondAsync);
+        var clock = new TestClock(FinanceData.Now);
+        await using var factory = Start(finance, clock);
+        var client = factory.CreateClient();
+        var warningKey = $"money.budget-warning.{FinanceData.GroceriesId}";
+        var overKey = $"money.budget-over.{FinanceData.GroceriesId}";
+
+        var warning = Assert.Single((await GetAlertsAsync(client)).Alerts, alert => alert.Id == warningKey);
+        Assert.Equal(("Budget nearly used up", AlertSeverity.Warning, "/money/budgets"), (warning.Title, warning.Severity, warning.Link));
+        Assert.Equal((AlertValue.Percent(84m), AlertValue.Money(24m)), (warning.Values["used"], warning.Values["left"]));
+        Assert.DoesNotContain((await GetAlertsAsync(client)).Alerts, alert => alert.Id == overKey);
+
+        // Over the limit: the warning goes, and the "over" alert comes.
+        SetBudgets(data, FinanceData.BudgetJson(FinanceData.GroceriesId, "Groceries", 150m, 180m, 120m));
+        clock.Now = FinanceData.Now.AddMinutes(10);
+        var list = await GetAlertsAsync(client, refresh: true);
+        Assert.Contains(list.Alerts, alert => alert.Id == overKey);
+        Assert.DoesNotContain(list.Alerts, alert => alert.Id == warningKey);
     }
 
     [Fact]

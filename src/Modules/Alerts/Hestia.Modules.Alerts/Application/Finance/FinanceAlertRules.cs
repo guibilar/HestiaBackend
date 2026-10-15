@@ -33,6 +33,7 @@ public static class FinanceAlertRules
 
     // The key prefixes of each rule: what a check covers when the report of the rule loaded.
     public const string BudgetOverPrefix = "money.budget-over.";
+    public const string BudgetWarningPrefix = "money.budget-warning.";
     public const string NotImportedKey = "money.statements-not-imported";
     public const string BehindPrefix = "money.statements-behind.";
     public const string PriceChangedPrefix = "money.price-changed.";
@@ -40,6 +41,12 @@ public static class FinanceAlertRules
 
     /// <summary>The sort key of a budget alert that an event raised: after the budgets that a check found, until the next check.</summary>
     public const string EventBudgetSortKey = "1|9999";
+
+    /// <summary>The sort key of a budget warning that an event raised: after all budgets over their limit (T71).</summary>
+    public const string EventBudgetWarningSortKey = "1|w9999";
+
+    /// <summary>The spending (in percent of the limit) from which a budget is "nearly used up" (T71, the same as finance).</summary>
+    public const decimal WarningPercent = 80;
 
     /// <summary>Everything that the rules read. Null: that report did not load.</summary>
     public sealed record Inputs(
@@ -55,6 +62,7 @@ public static class FinanceAlertRules
         if (inputs.Budgets is not null)
         {
             covered.Add(BudgetOverPrefix);
+            covered.Add(BudgetWarningPrefix);
         }
         if (inputs.Accounts is not null)
         {
@@ -84,6 +92,11 @@ public static class FinanceAlertRules
         foreach (var budget in (inputs.Budgets?.Items ?? new List<Budget>()).Where(IsOver))
         {
             yield return BudgetOver(budget.Id, budget.Name, budget.PercentageUsed, $"1|{index++:D4}");
+        }
+        index = 0;
+        foreach (var budget in (inputs.Budgets?.Items ?? new List<Budget>()).Where(IsNearlyUsedUp))
+        {
+            yield return BudgetWarning(budget.Id, budget.Name, budget.PercentageUsed, budget.TotalRemaining, $"1|w{index++:D4}");
         }
 
         var accounts = inputs.Accounts ?? Array.Empty<Account>();
@@ -153,7 +166,28 @@ public static class FinanceAlertRules
             },
             AlertSeverity.Bad, BudgetsLink, sortKey);
 
+    /// <summary>
+    /// A budget at 80 % or more of its limit, but not at the limit yet (T71). It replaces the local "Budget warnings"
+    /// rule of the Android app. The key has no period: a new period with less spending removes the alert at the next
+    /// check, and a new crossing raises it again.
+    /// </summary>
+    public static AlertCandidate BudgetWarning(Guid budgetId, string name, decimal percentageUsed, decimal remaining,
+        string sortKey) =>
+        Alert($"{BudgetWarningPrefix}{budgetId}", "budget-warning", "Budget nearly used up",
+            "{budget} is nearly used up ({used} used, {left} left)",
+            new Dictionary<string, AlertValue>
+            {
+                ["budget"] = AlertValue.Plain(name),
+                ["used"] = AlertValue.Percent(Math.Round(percentageUsed, MidpointRounding.AwayFromZero)),
+                ["left"] = AlertValue.Money(remaining)
+            },
+            AlertSeverity.Warning, BudgetsLink, sortKey);
+
     public static bool IsOver(Budget budget) => budget.PercentageUsed >= 100;
+
+    /// <summary>At 80 % or more and under 100 %, with a limit (a budget of zero has no warning).</summary>
+    public static bool IsNearlyUsedUp(Budget budget) =>
+        budget.TotalAmount > 0 && budget.PercentageUsed >= WarningPercent && !IsOver(budget);
 
     /// <summary>
     /// The day an account's imported statements reach: its latest transaction or its latest balance (Wealthsimple
