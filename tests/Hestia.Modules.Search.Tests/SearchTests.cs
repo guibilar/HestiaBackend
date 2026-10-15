@@ -92,7 +92,7 @@ public class SearchTests
         var result = await host.SearchAsync("?q=%20dishwasher%20");
 
         Assert.Equal("dishwasher", result.Query);
-        Assert.Equal(["Money", "Documents", "Tasks", "Home", "People", "Journal"], result.Modules.Select(m => m.Module));
+        Assert.Equal(["Money", "Documents", "Tasks", "Home", "People", "Journal", "Inbox"], result.Modules.Select(m => m.Module));
         Assert.All(result.Modules, m => Assert.Equal(SearchModuleStatus.Complete, m.Status));
         // Finance says 3 matches in all, and gave the first one.
         var money = result.Modules[0];
