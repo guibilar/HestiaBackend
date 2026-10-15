@@ -29,14 +29,13 @@ namespace Hestia.Api.Tests;
 /// A test that delivers each event twice needs real data for each event and each consumer, and passes when a consumer
 /// finds nothing to change. This check needs no data and covers a new consumer at once.
 /// </remarks>
-public class ConsumerInboxTests
+[Collection(StartedHostCollection.Name)]
+public class ConsumerInboxTests(StartedHost host)
 {
     [Fact]
-    public async Task EveryModuleConsumer_UsesAnInbox_OrChangesNoData()
+    public void EveryModuleConsumer_UsesAnInbox_OrChangesNoData()
     {
-        await using var factory = new HestiaApiFactory();
-        factory.CreateClient();
-        var handlers = factory.Services.GetRequiredService<HandlerGraph>();
+        var handlers = host.Services.GetRequiredService<HandlerGraph>();
         var methods = handlers.AllChains()
             .SelectMany(chain => chain.Handlers)
             .Select(call => call.Method)
