@@ -801,8 +801,9 @@ The platform (`Hestia.Platform/Events/ModuleEventsInterceptor.cs`) publishes the
 after `SaveChanges`, or, in an explicit transaction, when the transaction commits. A failed save or a rollback publishes
 nothing. This path is not durable: if the process stops between the commit and the publish, the event is lost.
 
-**Durable module events (T38).** A module that must never lose an event opts in when it registers its DbContext, and
-adds the outbox table to its model:
+**Durable module events (T38).** Every module with events uses them (T78; `DurableModuleEventsTests` checks it). Only
+the Sample module keeps the in-memory path above, to show it. A module opts in when it registers its DbContext, and adds
+the outbox table to its model:
 
 ```csharp
 services.AddModuleDbContext<DocumentsDbContext>(DocumentsDbContext.SchemaName, database => database.UseDurableEvents());
