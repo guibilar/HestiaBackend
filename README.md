@@ -371,7 +371,7 @@ upload ──> files to the volume (by SHA-256) + rows and DocumentAdded (one sa
 | `DELETE /{id}` | Deletes the document, its links, and its files. |
 | `GET /{id}/files/{fileId}` | The file, as a download. `?inline=true` shows it in the browser. |
 | `POST /{id}/ocr` | Runs the OCR again (202, `ocrStatus` `Pending`). |
-| `POST /{id}/links`, `DELETE /{id}/links/{linkId}` | A link, `{ "kind": "Money.Transaction", "targetId": "<transaction id>" }` or `Home.Item` (T22). |
+| `POST /{id}/links`, `DELETE /{id}/links/{linkId}` | A link, `{ "kind": "Money.Transaction", "targetId": "<transaction id>" }`, `Home.Item` (T22), or `People.Person` (T93). |
 | `GET /by-link?kind=Money.Transaction&id=<transaction id>` | The documents of one thing (for T14). |
 
 ```bash
@@ -409,7 +409,8 @@ The first kind is `Money.Transaction`: the host asks finance with the signed-in 
 (`POST /api/Transaction/Filter` with the transaction id, a read-only query). It never reads the finance database.
 Finance down: 502. The second kind is `Home.Item` (T22): the host checks the item with the Home module
 (`IHomeQueries`). When an item is deleted, `DocumentItemLinksConsumer` removes its links (with the inbox), and sends
-`DocumentUnlinked` for each one; the documents stay.
+`DocumentUnlinked` for each one; the documents stay. The third kind is `People.Person` (T93), checked with the People
+module (`IPeopleQueries`); `DocumentPersonLinksConsumer` removes the links when the person is deleted.
 
 **Events (durable, T38).** `DocumentAdded`, `DocumentChanged` (`Change`: `Details` or `OcrText`), `DocumentDeleted`,
 `DocumentLinked`, and `DocumentUnlinked`, in `Hestia.Modules.Documents.Contracts`. A delete sends `DocumentUnlinked`
@@ -541,7 +542,9 @@ curl -b cookies 'http://localhost:5097/api/tasks?due=overdue'
 (`IDocumentQueries`); `Money.Transaction` is checked with finance as the signed-in user (finance down: 502). When a
 document is deleted, the consumer `DocumentDeletedConsumer` removes its links (with the inbox); the tasks stay.
 `Home.Item` (T22) is checked with the Home module (`IHomeQueries`): a task with this link is maintenance of the item.
-When an item is deleted, `TaskItemLinksConsumer` removes its links (with the inbox).
+When an item is deleted, `TaskItemLinksConsumer` removes its links (with the inbox). `People.Person` (T93) is checked
+with the People module (`IPeopleQueries`), for example "Call Marco"; `TaskPersonLinksConsumer` removes the links when
+the person is deleted.
 
 **Events (durable, T38).** `TaskCreated`, `TaskChanged` (`Change`: `Details` or `Links`), `TaskCompleted` (with the due
 date that was done and, for a repeated task, `NextDueOn`), `TaskReopened`, and `TaskDeleted`, in
@@ -669,7 +672,7 @@ years; `nextBirthday` is today or later.
 | `GET /summary` | `date`, `peopleCount`, `reachOut` (overdue reminders, most overdue first), `upcoming` (birthdays in the next 30 days: `date`, `days`, `age`, `giftIdeas`), `openLoans`, `overdueLoans`. |
 | `GET /groups` | The groups in use with `count`. |
 | `GET /?group=&q=&sort=name\|contact&page=1&pageSize=20` | A page of people. `q`: words in the name, nickname, relationship, groups, email, phone, notes. `sort=contact`: reach-out day first. |
-| `POST /`, `GET /{id}`, `PUT /{id}`, `DELETE /{id}` | A person (`PUT` replaces all details). `GET` has the latest 20 contacts, the gift ideas, the loans, and the links. |
+| `POST /`, `GET /{id}`, `PUT /{id}`, `DELETE /{id}` | A person (`PUT` replaces all details). `GET` has the latest 20 contacts, the gift ideas, the loans, the links, and `linkedFrom` (documents and tasks that link to the person, T93). |
 | `GET /{id}/interactions`, `POST /{id}/interactions`, `PUT /interactions/{id}`, `DELETE /interactions/{id}` | Contacts (`occurredOn`, default today; not in the future). |
 | `POST /{id}/gifts`, `PUT /gifts/{id}`, `DELETE /gifts/{id}` | Gift ideas. |
 | `GET /loans?status=open\|returned\|all`, `POST /{id}/loans`, `PUT /loans/{id}`, `DELETE /loans/{id}` | Loans of all people. |
@@ -684,7 +687,8 @@ curl -b cookies -H 'Content-Type: application/json' -d '{"kind":"Coffee"}' http:
 
 **Links.** The host checks the target with `IDocumentQueries`, `ITaskQueries`, `IHomeQueries`, or finance (as the
 signed-in user; finance down: 502). `PersonLinkCleanupConsumer` removes the links on `DocumentDeleted`, `TaskDeleted`,
-and `ItemDeleted`, with the inbox. Other modules do not link to people yet (T93).
+and `ItemDeleted`, with the inbox. Documents and tasks can also link to a person (kind `People.Person`, T93): the person
+page lists them in `linkedFrom`, and `GET /by-link` gives the people of a document or a task from both sides of the link.
 
 **Events (durable, T38).** `PersonAdded`, `PersonChanged` (`Details` or `Links`), `PersonDeleted`, `InteractionChanged`,
 `GiftChanged`, `LoanChanged` (`Change`: `Added`, `Changed`, `Deleted`), in `Hestia.Modules.People.Contracts`. Other
