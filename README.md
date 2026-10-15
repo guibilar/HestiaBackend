@@ -790,6 +790,22 @@ A source that fails, or does not answer in `Timeline:SourceTimeout` (10 seconds)
 `Failed`; the others still show. Finance down: Money is `Failed`. A month review that does not load makes Money
 `Partial`.
 
+
+## Search
+
+The Search module (T17) is one search across all modules. It keeps no index (D15): each module searches its own data
+through `ISearchSource` (`Hestia.Modules.Search.Contracts`), with the same rules as its own list search, best match
+first. Documents and Journal use their PostgreSQL full-text index; Tasks, Home, and People search the words in their
+fields; Money searches the descriptions of the transactions in finance, as the signed-in user.
+
+**Endpoint** (it only reads): `GET /api/search?q=&module=&limit=`. `q` has 2 to 200 characters (spaces are made
+single). Without `module`, each module gives its 5 best hits (`limit`, 1 to 50); with `module`, only that module, 20 hits.
+The answer has `query`, `total` (all matches), and `modules` in order (Money first): each with `module`, `status`
+(`Complete` or `Failed`), `total`, and `hits`. A hit has `id`, `module`, `kind` (`transaction`, `document`, `task`,
+`item`, `person`, `entry`), `title`, `text`, `day`, `amount`, and `link` (the web route).
+
+A source that fails, or does not answer in `Search:SourceTimeout` (10 seconds), is `Failed`; the others still answer.
+
 ## OpenAPI document
 
 The host describes the module endpoints (not the finance paths) at `/openapi/v1.json`, with `/api/Auth/*`

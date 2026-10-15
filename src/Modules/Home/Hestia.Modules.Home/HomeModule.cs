@@ -3,6 +3,7 @@ using Hestia.Modules.Home.Application;
 using Hestia.Modules.Home.Contracts;
 using Hestia.Modules.Home.Endpoints;
 using Hestia.Modules.Home.Infrastructure;
+using Hestia.Modules.Search.Contracts;
 using Hestia.Modules.Timeline.Contracts;
 using Hestia.Platform.Hosting;
 using Hestia.Platform.Modules;
@@ -57,6 +58,8 @@ public static class HomeModuleExtensions
         services.AddScoped<IAlertSource, WarrantyAlerts>();
         // The Timeline entries (T16).
         services.AddScoped<ITimelineSource, HomeTimeline>();
+        // The search (T17).
+        services.AddScoped<ISearchSource, HomeSearch>();
         return services;
     }
 

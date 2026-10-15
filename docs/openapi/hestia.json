@@ -2297,6 +2297,56 @@
         }
       }
     },
+    "/api/search": {
+      "get": {
+        "tags": [
+          "Search"
+        ],
+        "summary": "One search across all modules: the best hits of each module, in module order.",
+        "description": "q: 2 to 200 characters. module: only one module (for example Documents), with more hits. limit: the hits of each module, 1 to 50 (5; 20 with module).",
+        "operationId": "Search",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "module",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/tasks": {
       "post": {
         "tags": [
@@ -5505,6 +5555,125 @@
           }
         }
       },
+      "SearchDto": {
+        "required": [
+          "query",
+          "total",
+          "modules"
+        ],
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string"
+          },
+          "total": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "modules": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SearchModuleDto"
+            }
+          }
+        }
+      },
+      "SearchHit": {
+        "required": [
+          "id",
+          "module",
+          "kind",
+          "title",
+          "text",
+          "day",
+          "amount",
+          "link"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "module": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "text": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "day": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          },
+          "amount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "link": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "SearchModuleDto": {
+        "required": [
+          "module",
+          "status",
+          "total",
+          "hits"
+        ],
+        "type": "object",
+        "properties": {
+          "module": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SearchModuleStatus"
+          },
+          "total": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "hits": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SearchHit"
+            }
+          }
+        }
+      },
+      "SearchModuleStatus": {
+        "enum": [
+          "Complete",
+          "Failed"
+        ]
+      },
       "SignedOutSessionsDto": {
         "required": [
           "count"
@@ -6614,6 +6783,9 @@
     },
     {
       "name": "People"
+    },
+    {
+      "name": "Search"
     },
     {
       "name": "Tasks"

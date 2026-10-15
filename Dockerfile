@@ -15,6 +15,8 @@ COPY ["src/Modules/Home/Hestia.Modules.Home/Hestia.Modules.Home.csproj", "src/Mo
 COPY ["src/Modules/Home/Hestia.Modules.Home.Contracts/Hestia.Modules.Home.Contracts.csproj", "src/Modules/Home/Hestia.Modules.Home.Contracts/"]
 COPY ["src/Modules/Journal/Hestia.Modules.Journal/Hestia.Modules.Journal.csproj", "src/Modules/Journal/Hestia.Modules.Journal/"]
 COPY ["src/Modules/Journal/Hestia.Modules.Journal.Contracts/Hestia.Modules.Journal.Contracts.csproj", "src/Modules/Journal/Hestia.Modules.Journal.Contracts/"]
+COPY ["src/Modules/Search/Hestia.Modules.Search/Hestia.Modules.Search.csproj", "src/Modules/Search/Hestia.Modules.Search/"]
+COPY ["src/Modules/Search/Hestia.Modules.Search.Contracts/Hestia.Modules.Search.Contracts.csproj", "src/Modules/Search/Hestia.Modules.Search.Contracts/"]
 COPY ["src/Modules/Timeline/Hestia.Modules.Timeline/Hestia.Modules.Timeline.csproj", "src/Modules/Timeline/Hestia.Modules.Timeline/"]
 COPY ["src/Modules/Timeline/Hestia.Modules.Timeline.Contracts/Hestia.Modules.Timeline.Contracts.csproj", "src/Modules/Timeline/Hestia.Modules.Timeline.Contracts/"]
 COPY ["src/Modules/People/Hestia.Modules.People/Hestia.Modules.People.csproj", "src/Modules/People/Hestia.Modules.People/"]

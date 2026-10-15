@@ -351,6 +351,13 @@ jobs:
           curl -sf -H "Cookie: $SESSION_COOKIE" 'http://localhost:5097/api/timeline?days=7' | tee /dev/stderr \
             | jq -e '[.days[].entries[] | select(.module == "Journal" and .text == "CI walked along the rivers")] | length == 1'
           curl -sf -H "Cookie: $SESSION_COOKIE" 'http://localhost:5097/api/timeline?module=Documents&days=31' | jq -e '[.days[].entries[]] | length >= 1'
+      # T17: one search in the image: the document (PostgreSQL full-text index) and the journal entry of the steps above.
+      - name: Search
+        run: |
+          curl -sf -H "Cookie: $SESSION_COOKIE" 'http://localhost:5097/api/search?q=toaster' | tee /dev/stderr \
+            | jq -e '[.modules[] | select(.module == "Documents") | .hits[]] | length == 1'
+          curl -sf -H "Cookie: $SESSION_COOKIE" 'http://localhost:5097/api/search?q=walking%20river&module=Journal' \
+            | jq -e '.modules[0].total == 1'
       - name: A module event reaches its consumer after the commit (in process)
         run: |
           curl -sf -H "Cookie: $SESSION_COOKIE" -X POST -H 'Content-Type: application/json' -d '{"name":"CI kettle"}' \

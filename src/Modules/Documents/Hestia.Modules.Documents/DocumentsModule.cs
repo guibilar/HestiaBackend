@@ -4,6 +4,7 @@ using Hestia.Modules.Documents.Application.Ocr;
 using Hestia.Modules.Documents.Contracts;
 using Hestia.Modules.Documents.Endpoints;
 using Hestia.Modules.Documents.Infrastructure;
+using Hestia.Modules.Search.Contracts;
 using Hestia.Modules.Timeline.Contracts;
 using Hestia.Platform.Health;
 using Hestia.Platform.Hosting;
@@ -81,6 +82,8 @@ public static class DocumentsModuleExtensions
         services.AddScoped<IAlertSource, DocumentFileAlerts>();
         // The Timeline entries (T16).
         services.AddScoped<ITimelineSource, DocumentTimeline>();
+        // The search (T17).
+        services.AddScoped<ISearchSource, DocumentSearch>();
         return services;
     }
 

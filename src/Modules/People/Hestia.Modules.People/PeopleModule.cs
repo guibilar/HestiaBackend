@@ -3,6 +3,7 @@ using Hestia.Modules.People.Application;
 using Hestia.Modules.People.Contracts;
 using Hestia.Modules.People.Endpoints;
 using Hestia.Modules.People.Infrastructure;
+using Hestia.Modules.Search.Contracts;
 using Hestia.Modules.Timeline.Contracts;
 using Hestia.Platform.Hosting;
 using Hestia.Platform.Modules;
@@ -55,6 +56,8 @@ public static class PeopleModuleExtensions
         services.AddScoped<IAlertSource, ReminderAlerts>();
         // The Timeline entries (T16).
         services.AddScoped<ITimelineSource, PeopleTimeline>();
+        // The search (T17).
+        services.AddScoped<ISearchSource, PeopleSearch>();
         return services;
     }
 

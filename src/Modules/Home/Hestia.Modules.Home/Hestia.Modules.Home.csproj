@@ -17,6 +17,8 @@
     <ProjectReference Include="..\..\Tasks\Hestia.Modules.Tasks.Contracts\Hestia.Modules.Tasks.Contracts.csproj" />
     <!-- The Timeline entries of the module (ITimelineSource; T16). -->
     <ProjectReference Include="..\..\Timeline\Hestia.Modules.Timeline.Contracts\Hestia.Modules.Timeline.Contracts.csproj" />
+    <!-- The search of the module (ISearchSource; T17). -->
+    <ProjectReference Include="..\..\Search\Hestia.Modules.Search.Contracts\Hestia.Modules.Search.Contracts.csproj" />
   </ItemGroup>
 
 </Project>
