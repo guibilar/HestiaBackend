@@ -5,6 +5,7 @@ using Hestia.Api.Gateway;
 using Hestia.Platform.Errors;
 using Hestia.Platform.Health;
 using Hestia.Platform.Hosting;
+using Hestia.Platform.Http;
 using Hestia.Platform.Modules;
 using Hestia.Platform.Persistence;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
@@ -68,6 +69,9 @@ if (ModuleCommands.Find(app.Services, args) is { } command)
 
 // First, so everything after it sees the scheme and the address that the client used.
 app.UseForwardedHeaders();
+// No NUL characters in the query string or a JSON body: PostgreSQL refuses them, and the request failed with 500.
+// Before the module endpoints and the finance proxy read the request.
+app.UseNulFreeRequests();
 app.UseExceptionHandler();
 app.UseStatusCodePages();
 

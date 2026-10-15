@@ -2,6 +2,7 @@ using Hestia.Modules.Documents.Application;
 using Hestia.Modules.Documents.Contracts;
 using Hestia.Platform.Auth;
 using Hestia.Platform.Exceptions;
+using Hestia.Platform.Http;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
@@ -164,13 +165,14 @@ public static class DocumentEndpoints
         return new DocumentUpload(
             Value(form, "title"),
             Value(form, "kind"),
-            form["tags"].OfType<string>().ToList(),
+            form["tags"].OfType<string>().Select(tag => NulCharacters.Remove(tag)!).ToList(),
             Value(form, "issuedOn"),
             Value(form, "expiresOn"),
             Value(form, "notes"),
             form.Files.ToList());
     }
 
+    // No NUL characters: PostgreSQL refuses them (the JSON requests get the same from the host, NulCharacters).
     private static string? Value(IFormCollection form, string name) =>
-        form.TryGetValue(name, out var values) && values.Count > 0 ? values[^1] : null;
+        form.TryGetValue(name, out var values) && values.Count > 0 ? NulCharacters.Remove(values[^1]) : null;
 }

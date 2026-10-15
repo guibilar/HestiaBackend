@@ -57,6 +57,17 @@ public class HardeningTests
     }
 
     [Fact]
+    public async Task AnUpload_WithNulCharacters_IsSaved_WithoutThem()
+    {
+        // PostgreSQL cannot keep NUL in text: the form fields were a 500.
+        await using var host = DocumentsHost.Start();
+
+        var document = await host.UploadOkAsync("Kettle\0 receipt", tags: ["kitch\0en"], notes: "\0Paid in cash");
+
+        Assert.Equal(("Kettle receipt", "kitchen", "Paid in cash"), (document.Title, document.Tags.Single(), document.Notes));
+    }
+
+    [Fact]
     public async Task AnUploadOverTheUploadLimit_IsABadRequest_AndNothingIsStored()
     {
         await using var host = DocumentsHost.Start(new Dictionary<string, string?>

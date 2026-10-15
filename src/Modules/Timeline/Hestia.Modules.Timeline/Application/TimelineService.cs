@@ -31,6 +31,11 @@ public sealed class TimelineService(
         }
         var timeZone = _options.GetTimeZone();
         var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(time.GetUtcNow(), timeZone).DateTime);
+        if (before is { } first && first.DayNumber < days)
+        {
+            // Year 1: no page ends before it (the dates would go below 0001-01-01).
+            throw new InvalidInputException("before", $"before must be {DateOnly.MinValue.AddDays(days):yyyy-MM-dd} or later.");
+        }
         var end = before is { } b ? (b > today ? today : b.AddDays(-1)) : today;
         var start = end.AddDays(-(days - 1));
         var range = new TimelineRange(start, end, timeZone);
