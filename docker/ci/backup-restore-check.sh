@@ -1,10 +1,10 @@
 #!/bin/sh
 # CI check for the backups (T24). Run it from the directory with docker-compose.yml, with the stack up.
-#   1. Adds a Sample item, a document with a file (T11), a task (T19), and a home item in a room (T22), and makes a
+#   1. Adds a Sample item, a document with a file (T11), a task (T19), and a home item in a room (T22), a person with a contact (T20), and makes a
 #      backup with backup.sh.
 #   2. Restores the dump into a new, empty database, and checks the "sample" schema and the item, the document row,
 #      the copy of its file next to the dump, the task with its completion (the "tasks" schema), and the home item
-#      with its room (the "home" schema).
+#      with its room (the "home" schema), and the person with the contact (the "people" schema).
 #   3. Adds a second item and a second document, runs docker/restore.sh (dump from the volume, then from a file on
 #      this machine), and checks that the database and the document files are back at the dump: the first item and
 #      the first document only, with its file.
@@ -46,6 +46,12 @@ add_home_item() {
   curl -sf -b "$cookies" -H 'Content-Type: application/json' -d "{\"name\":\"$1\",\"roomId\":\"$room\"}" "$api/api/home/items" > /dev/null
 }
 home_items_named() { sql "$1" "SELECT count(*) FROM home.\"Items\" i JOIN home.\"Rooms\" r ON r.\"Id\" = i.\"RoomId\" WHERE i.\"Name\" = '$2' AND r.\"Name\" = '$2'"; }
+# T20: a person with a contact.
+add_person() {
+  id=$(curl -sf -b "$cookies" -H 'Content-Type: application/json' -d "{\"name\":\"$1\"}" "$api/api/people" | jq -r .person.id)
+  curl -sf -b "$cookies" -H 'Content-Type: application/json' -d '{"kind":"Call"}' "$api/api/people/$id/interactions" > /dev/null
+}
+people_named() { sql "$1" "SELECT count(*) FROM people.\"People\" p JOIN people.\"Interactions\" i ON i.\"PersonId\" = p.\"Id\" WHERE p.\"Name\" = '$2'"; }
 tasks_named() { sql "$1" "SELECT count(*) FROM tasks.\"Tasks\" t JOIN tasks.\"TaskCompletions\" c ON c.\"TaskId\" = t.\"Id\" WHERE t.\"Title\" = '$2'"; }
 documents_named() { sql "$1" "SELECT count(*) FROM documents.\"Documents\" WHERE \"Title\" = '$2'"; }
 file_in_volume() { # sha256; prints yes or no
@@ -69,6 +75,7 @@ echo "1. Backup"
 add_item before-backup
 add_task before-backup
 add_home_item before-backup
+add_person before-backup
 first_sha=$(add_document before-backup)
 [ "$(file_in_volume "$first_sha")" = yes ] || fail "The uploaded file is not on the documents volume."
 docker compose exec -T backup backup.sh once
@@ -96,12 +103,15 @@ docker compose exec -T backup pg_restore --no-owner --exit-on-error --dbname res
   fail "The restored database does not have the task and its completion (tasks schema)."
 [ "$(home_items_named restore_check before-backup)" = 1 ] ||
   fail "The restored database does not have the home item and its room (home schema)."
+[ "$(people_named restore_check before-backup)" = 1 ] ||
+  fail "The restored database does not have the person and the contact (people schema)."
 docker compose exec -T backup dropdb restore_check
 
 echo "3. docker/restore.sh with the dump in the volume"
 add_item after-backup
 add_task after-backup
 add_home_item after-backup
+add_person after-backup
 second_sha=$(add_document after-backup)
 docker/restore.sh "$(basename "$dump")"
 wait_ready
@@ -113,6 +123,8 @@ wait_ready
 [ "$(tasks_named Hestia after-backup)" = 0 ] || fail "restore.sh kept a task from after the dump."
 [ "$(home_items_named Hestia before-backup)" = 1 ] || fail "restore.sh lost the home item from the dump."
 [ "$(home_items_named Hestia after-backup)" = 0 ] || fail "restore.sh kept a home item from after the dump."
+[ "$(people_named Hestia before-backup)" = 1 ] || fail "restore.sh lost the person from the dump."
+[ "$(people_named Hestia after-backup)" = 0 ] || fail "restore.sh kept a person from after the dump."
 [ "$(file_in_volume "$second_sha")" = no ] || fail "restore.sh kept the file of a document from after the dump."
 [ "$(download_sha before-backup)" = "$first_sha" ] || fail "The restored document does not download its file."
 [ "$(docker compose exec -T backup stat -c '%u' "/documents/$(echo "$first_sha" | cut -c1-2)/$first_sha")" = 1654 ] ||

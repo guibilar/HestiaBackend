@@ -32,6 +32,8 @@ services:
       Tasks__TimeZone: ${TZ:-America/Toronto}
       # T22: the same zone for the warranties of the home items ("ends in the next 30 days").
       Home__TimeZone: ${TZ:-America/Toronto}
+      # T20: the same zone for the people: reach-out reminders and birthdays.
+      People__TimeZone: ${TZ:-America/Toronto}
       # T04: the RabbitMQ broker of the finance project (on "finance"), for the finance events. Empty: no finance events.
       Events__RabbitMq: ${EVENTS_RABBITMQ_URL:-}
       # T04: a debug consumer logs every event. For a check, not for every day.

@@ -13,6 +13,8 @@ COPY ["src/Modules/Documents/Hestia.Modules.Documents/Hestia.Modules.Documents.c
 COPY ["src/Modules/Documents/Hestia.Modules.Documents.Contracts/Hestia.Modules.Documents.Contracts.csproj", "src/Modules/Documents/Hestia.Modules.Documents.Contracts/"]
 COPY ["src/Modules/Home/Hestia.Modules.Home/Hestia.Modules.Home.csproj", "src/Modules/Home/Hestia.Modules.Home/"]
 COPY ["src/Modules/Home/Hestia.Modules.Home.Contracts/Hestia.Modules.Home.Contracts.csproj", "src/Modules/Home/Hestia.Modules.Home.Contracts/"]
+COPY ["src/Modules/People/Hestia.Modules.People/Hestia.Modules.People.csproj", "src/Modules/People/Hestia.Modules.People/"]
+COPY ["src/Modules/People/Hestia.Modules.People.Contracts/Hestia.Modules.People.Contracts.csproj", "src/Modules/People/Hestia.Modules.People.Contracts/"]
 COPY ["src/Modules/Identity/Hestia.Modules.Identity/Hestia.Modules.Identity.csproj", "src/Modules/Identity/Hestia.Modules.Identity/"]
 COPY ["src/Modules/Identity/Hestia.Modules.Identity.Contracts/Hestia.Modules.Identity.Contracts.csproj", "src/Modules/Identity/Hestia.Modules.Identity.Contracts/"]
 COPY ["src/Modules/Sample/Hestia.Modules.Sample/Hestia.Modules.Sample.csproj", "src/Modules/Sample/Hestia.Modules.Sample/"]

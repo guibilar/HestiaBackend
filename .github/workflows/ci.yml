@@ -304,6 +304,25 @@ jobs:
           curl -sf -H "Cookie: $SESSION_COOKIE" -o home-export.csv http://localhost:5097/api/home/items/export.csv
           [ "$(head -c 3 home-export.csv | od -An -tx1 | tr -d ' \n')" = efbbbf ]
           grep -q '^CI kitchen,CI dishwasher,,Bosch,,,2,,450.50,' home-export.csv
+      # T20: a person with a reminder and a contact, a gift idea, an open loan, the search, and the summary.
+      - name: People, contacts, gift ideas, loans, and the summary
+        run: |
+          body=$(curl -sf -H "Cookie: $SESSION_COOKIE" -H 'Content-Type: application/json' \
+            -d '{"name":"CI Marco","groups":["Friends"],"birthday":{"month":11,"day":2},"contactEveryDays":7}' \
+            http://localhost:5097/api/people)
+          id=$(echo "$body" | jq -r .person.id)
+          echo "$body" | jq -e '.person.groups == ["friends"] and .person.contactOverdue == false'
+          curl -sf -H "Cookie: $SESSION_COOKIE" -H 'Content-Type: application/json' -d '{"occurredOn":"2026-01-01","kind":"Call"}' \
+            "http://localhost:5097/api/people/$id/interactions" > /dev/null
+          curl -sf -H "Cookie: $SESSION_COOKIE" -H 'Content-Type: application/json' -d '{"title":"Kettle","price":49.5}' \
+            "http://localhost:5097/api/people/$id/gifts" > /dev/null
+          curl -sf -H "Cookie: $SESSION_COOKIE" -H 'Content-Type: application/json' -d '{"itemName":"Camping stove"}' \
+            "http://localhost:5097/api/people/$id/loans" > /dev/null
+          curl -sf -H "Cookie: $SESSION_COOKIE" "http://localhost:5097/api/people/$id" \
+            | jq -e '.person.lastContactOn == "2026-01-01" and .person.contactOverdue and (.giftIdeas | length) == 1 and (.loans | length) == 1'
+          curl -sf -H "Cookie: $SESSION_COOKIE" 'http://localhost:5097/api/people?q=marco&group=friends' | jq -e '.totalCount == 1'
+          curl -sf -H "Cookie: $SESSION_COOKIE" http://localhost:5097/api/people/summary | tee /dev/stderr \
+            | jq -e '(.reachOut | length) >= 1 and .openLoans >= 1'
       - name: A module event reaches its consumer after the commit (in process)
         run: |
           curl -sf -H "Cookie: $SESSION_COOKIE" -X POST -H 'Content-Type: application/json' -d '{"name":"CI kettle"}' \
