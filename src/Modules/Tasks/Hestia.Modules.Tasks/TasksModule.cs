@@ -1,4 +1,5 @@
 using Hestia.Modules.Alerts.Contracts;
+using Hestia.Modules.Search.Contracts;
 using Hestia.Modules.Tasks.Application;
 using Hestia.Modules.Tasks.Contracts;
 using Hestia.Modules.Tasks.Endpoints;
@@ -54,6 +55,8 @@ public static class TasksModuleExtensions
         services.AddScoped<IAlertSource, TaskDueAlerts>();
         // The Timeline entries (T16).
         services.AddScoped<ITimelineSource, TaskTimeline>();
+        // The search (T17).
+        services.AddScoped<ISearchSource, TaskSearch>();
         return services;
     }
 

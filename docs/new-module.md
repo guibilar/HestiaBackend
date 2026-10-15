@@ -182,6 +182,14 @@ The Timeline (T16) shows what happened in all modules, day by day. A module adds
 4. Register it in `AddServices`: `services.AddScoped<ITimelineSource, DocumentTimeline>();`. Example: `DocumentTimeline`.
 5. Test it through `GET /api/timeline` (see `tests/Hestia.Modules.Timeline.Tests`).
 
+## 7c. Search (when the module has things to find)
+
+The search (T17) asks each module for its own hits. Add a class that implements `ISearchSource`
+(`Hestia.Modules.Search.Contracts`; add the `ProjectReference`). `SearchAsync(text, limit)` gives at most `limit` hits,
+best first, and the total of matches. Use your own list search (as `DocumentSearch` calls `DocumentService.ListAsync`),
+so the list and the search agree. `Order` is your place (Money is 0). Register it:
+`services.AddScoped<ISearchSource, DocumentSearch>();`. Test it through `GET /api/search`.
+
 ## 8. "Needs attention" items: alerts (when the module has them)
 
 The Alerts module (T15, see the README, section "Alerts") keeps one list of the things that need attention, from all

@@ -32,6 +32,7 @@
     <ProjectReference Include="..\Modules\People\Hestia.Modules.People\Hestia.Modules.People.csproj" />
     <ProjectReference Include="..\Modules\Journal\Hestia.Modules.Journal\Hestia.Modules.Journal.csproj" />
     <ProjectReference Include="..\Modules\Timeline\Hestia.Modules.Timeline\Hestia.Modules.Timeline.csproj" />
+    <ProjectReference Include="..\Modules\Search\Hestia.Modules.Search\Hestia.Modules.Search.csproj" />
     <ProjectReference Include="..\Modules\Sample\Hestia.Modules.Sample\Hestia.Modules.Sample.csproj" />
     <ProjectReference Include="..\Modules\Tasks\Hestia.Modules.Tasks\Hestia.Modules.Tasks.csproj" />
     <ProjectReference Include="..\Modules\Today\Hestia.Modules.Today\Hestia.Modules.Today.csproj" />

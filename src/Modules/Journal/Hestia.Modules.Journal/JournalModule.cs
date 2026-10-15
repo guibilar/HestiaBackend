@@ -2,6 +2,7 @@ using Hestia.Modules.Journal.Application;
 using Hestia.Modules.Journal.Contracts;
 using Hestia.Modules.Journal.Endpoints;
 using Hestia.Modules.Journal.Infrastructure;
+using Hestia.Modules.Search.Contracts;
 using Hestia.Modules.Timeline.Contracts;
 using Hestia.Modules.Today.Contracts;
 using Hestia.Platform.Hosting;
@@ -49,6 +50,8 @@ public static class JournalModuleExtensions
         services.AddScoped<ITodayCardProvider, JournalTodayCards>();
         // The Timeline entries (T16).
         services.AddScoped<ITimelineSource, JournalTimeline>();
+        // The search (T17).
+        services.AddScoped<ISearchSource, JournalSearch>();
         return services;
     }
 
