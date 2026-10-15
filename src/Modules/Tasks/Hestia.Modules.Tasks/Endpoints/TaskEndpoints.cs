@@ -32,15 +32,19 @@ public static class TaskEndpoints
                 string? q, int page = 1, int pageSize = 20) =>
                 service.ListAsync(new TaskQuery(status, tag, due, q, page, pageSize), cancellationToken))
             .WithName("ListTasks")
-            .WithSummary("A page of tasks: by due date (tasks without one last), then the manual order.")
+            .WithSummary("A page of tasks: by due date (tasks without one last), then the manual order; done tasks: the last done first.")
             .WithDescription(
                 "Filters: status (Open, Done), tag, due (today; overdue: open and due before today; upcoming: the next 7 " +
-                "days after today; none: no due date), q (words in the title, the notes, or the tags). \"Today\" is in " +
+                "days after today; later: after those days; none: no due date), q (words in the title, the notes, or the tags). \"Today\" is in " +
                 "the time zone of the host (Tasks:TimeZone).");
 
         tasks.MapGet("/summary", (TaskService service, CancellationToken cancellationToken) => service.CountAsync(cancellationToken))
             .WithName("GetTaskSummary")
             .WithSummary("The counts of open tasks due today, overdue, and upcoming (7 days), for the badges.");
+
+        tasks.MapGet("/tags", (TaskService service, CancellationToken cancellationToken) => service.TagsAsync(cancellationToken))
+            .WithName("ListTaskTags")
+            .WithSummary("The tags in use, by name, with the count of tasks (open and done) that have each one.");
 
         tasks.MapGet("/by-link", (TaskService service, CancellationToken cancellationToken, string? kind, string? id) =>
                 service.ListByLinkAsync(kind, id, cancellationToken))

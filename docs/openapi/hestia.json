@@ -1996,8 +1996,8 @@
         "tags": [
           "Tasks"
         ],
-        "summary": "A page of tasks: by due date (tasks without one last), then the manual order.",
-        "description": "Filters: status (Open, Done), tag, due (today; overdue: open and due before today; upcoming: the next 7 days after today; none: no due date), q (words in the title, the notes, or the tags). \"Today\" is in the time zone of the host (Tasks:TimeZone).",
+        "summary": "A page of tasks: by due date (tasks without one last), then the manual order; done tasks: the last done first.",
+        "description": "Filters: status (Open, Done), tag, due (today; overdue: open and due before today; upcoming: the next 7 days after today; later: after those days; none: no due date), q (words in the title, the notes, or the tags). \"Today\" is in the time zone of the host (Tasks:TimeZone).",
         "operationId": "ListTasks",
         "parameters": [
           {
@@ -2083,6 +2083,30 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/TaskCountsDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tasks/tags": {
+      "get": {
+        "tags": [
+          "Tasks"
+        ],
+        "summary": "The tags in use, by name, with the count of tasks (open and done) that have each one.",
+        "operationId": "ListTaskTags",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TagCountDto"
+                  }
                 }
               }
             }
@@ -4770,6 +4794,26 @@
         ],
         "type": "object",
         "properties": {
+          "count": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "TagCountDto": {
+        "required": [
+          "name",
+          "count"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
           "count": {
             "pattern": "^-?(?:0|[1-9]\\d*)$",
             "type": [

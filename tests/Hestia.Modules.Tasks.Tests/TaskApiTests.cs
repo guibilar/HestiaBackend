@@ -156,6 +156,37 @@ public class TaskApiTests
     }
 
     [Fact]
+    public async Task DoneTasks_AreListed_TheLastDoneFirst()
+    {
+        await using var host = TasksHost.Start();
+        var first = await host.CreateAsync("Done first", Today.AddDays(3));
+        var second = await host.CreateAsync("Done second", Today.AddDays(-2));
+        var third = await host.CreateAsync("Done third");
+        await host.DoneAsync(first.Id);
+        host.Clock.Now = host.Clock.Now.AddMinutes(5);
+        await host.DoneAsync(second.Id);
+        host.Clock.Now = host.Clock.Now.AddMinutes(5);
+        await host.DoneAsync(third.Id);
+
+        Assert.Equal(new[] { third.Id, second.Id, first.Id }, (await host.ListAsync("status=Done")).Items.Select(t => t.Id));
+    }
+
+    [Fact]
+    public async Task Tags_ListsTheTagsInUse_WithTheirCounts()
+    {
+        await using var host = TasksHost.Start();
+        Assert.Empty(await (await host.Client.GetAsync($"{Tasks}/tags")).ReadAsync<List<TagCountDto>>());
+        await host.CreateAsync("Pay the plumber", tags: ["Money", "home"]);
+        var done = await host.CreateAsync("Pay the rent", tags: ["money"]);
+        await host.DoneAsync(done.Id);
+        await host.CreateAsync("No tags");
+
+        var tags = await (await host.Client.GetAsync($"{Tasks}/tags")).ReadAsync<List<TagCountDto>>();
+
+        Assert.Equal(new[] { new TagCountDto("home", 1), new TagCountDto("money", 2) }, tags);
+    }
+
+    [Fact]
     public async Task List_FiltersByDue_Status_Tag_AndText()
     {
         await using var host = TasksHost.Start(new Dictionary<string, string?> { ["Tasks:UpcomingDays"] = "7" });
@@ -170,6 +201,7 @@ public class TaskApiTests
         Assert.Equal(new[] { today.Id }, (await host.ListAsync("due=today")).Items.Select(t => t.Id));
         Assert.Equal(new[] { late.Id }, (await host.ListAsync("due=overdue")).Items.Select(t => t.Id));
         Assert.Equal(new[] { inSeven.Id }, (await host.ListAsync("due=Upcoming")).Items.Select(t => t.Id));
+        Assert.Equal(new[] { inEight.Id }, (await host.ListAsync("due=later")).Items.Select(t => t.Id));
         Assert.Equal(new[] { none.Id }, (await host.ListAsync("due=none")).Items.Select(t => t.Id));
         Assert.Equal(new[] { lateDone.Id }, (await host.ListAsync("status=done")).Items.Select(t => t.Id));
         Assert.Equal(5, (await host.ListAsync("status=Open")).TotalCount);
