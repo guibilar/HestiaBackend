@@ -9,7 +9,8 @@ namespace Hestia.Platform.Http;
 /// PostgreSQL cannot keep the NUL character (U+0000) in text: a value with it fails the whole command, and the client
 /// got 500. Text pasted from a PDF or another app can have it, and nobody can see it. The host removes it where requests
 /// come in, before the module endpoints and the finance proxy read them: from the query string (<c>%00</c>) and from a
-/// JSON body (<c>\u0000</c>, the only way JSON can have it). It is not a JSON converter: a custom string converter makes
+/// JSON body (<c>\u0000</c>, the only way JSON can have it). A form
+/// (the Documents upload) uses <see cref="Remove"/> on its fields. It is not a JSON converter: a custom string converter makes
 /// the OpenAPI document lose the type of every string.
 /// </summary>
 public static partial class NulCharacters
@@ -21,6 +22,10 @@ public static partial class NulCharacters
     // backslashes (0, 2, …) before it. The group keeps those backslashes.
     [GeneratedRegex(@"(?<!\\)((?:\\\\)*)\\u0000", RegexOptions.CultureInvariant)]
     private static partial Regex JsonNul();
+
+    /// <summary>The text without NUL characters (the same instance when it has none). For a form field, for example.</summary>
+    public static string? Remove(string? text) =>
+        text is null || !text.Contains('\0') ? text : text.Replace("\0", string.Empty, StringComparison.Ordinal);
 
     /// <summary>The JSON text without NUL escapes (the same instance when it has none).</summary>
     public static string RemoveFromJson(string json) =>
