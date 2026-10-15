@@ -36,13 +36,14 @@ public static class DocumentEndpoints
                 "and notes. The answer comes at once, with ocrStatus Pending: the OCR runs in the background.");
 
         documents.MapGet("", (DocumentService service, CancellationToken cancellationToken, string? kind, string? tag,
-                string? q, string? expiresFrom, string? expiresTo, int page = 1, int pageSize = 20) =>
-                service.ListAsync(new DocumentQuery(kind, tag, q, expiresFrom, expiresTo, page, pageSize), cancellationToken))
+                string? q, string? expiresFrom, string? expiresTo, string? expiring, int page = 1, int pageSize = 20) =>
+                service.ListAsync(new DocumentQuery(kind, tag, q, expiresFrom, expiresTo, page, pageSize, expiring), cancellationToken))
             .WithName("ListDocuments")
             .WithSummary("A page of documents, newest first (best match first with q).")
             .WithDescription(
                 "Filters: kind, tag, q (full-text search in the title, the tags, the notes, and the OCR text; web search " +
-                "syntax: \"exact phrase\", -word), expiresFrom and expiresTo (yyyy-MM-dd, both included).");
+                "syntax: \"exact phrase\", -word), expiresFrom and expiresTo (yyyy-MM-dd, both included), expiring=soon (from " +
+                "today, in the host's time zone, to Documents:Expiry:SoonDays ahead; T86).");
 
         documents.MapGet("/by-link", (DocumentService service, CancellationToken cancellationToken, string? kind, string? id) =>
                 service.ListByLinkAsync(kind, id, cancellationToken))

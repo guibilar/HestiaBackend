@@ -114,7 +114,7 @@
           "Documents"
         ],
         "summary": "A page of documents, newest first (best match first with q).",
-        "description": "Filters: kind, tag, q (full-text search in the title, the tags, the notes, and the OCR text; web search syntax: \"exact phrase\", -word), expiresFrom and expiresTo (yyyy-MM-dd, both included).",
+        "description": "Filters: kind, tag, q (full-text search in the title, the tags, the notes, and the OCR text; web search syntax: \"exact phrase\", -word), expiresFrom and expiresTo (yyyy-MM-dd, both included), expiring=soon (from today, in the host's time zone, to Documents:Expiry:SoonDays ahead; T86).",
         "operationId": "ListDocuments",
         "parameters": [
           {
@@ -147,6 +147,13 @@
           },
           {
             "name": "expiresTo",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "expiring",
             "in": "query",
             "schema": {
               "type": "string"
