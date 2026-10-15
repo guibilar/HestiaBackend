@@ -99,6 +99,10 @@ A module event tells other modules that something changed (D7). See the README, 
 4. Consume an event (from your module, another module, or finance) with a public class whose name ends in `Consumer`,
    with a public `Consume(TEvent message, CancellationToken cancellationToken)` method. Example:
    `SampleItemCreatedConsumer`.
+   - **After you add or change a consumer, update the pre-generated handler code** (T39): run the tests with
+     `HESTIA_UPDATE_HANDLER_CODE=1` (for example `HESTIA_UPDATE_HANDLER_CODE=1 dotnet run -- -class "*GeneratedHandlerCodeTests*"`
+     in `tests/Hestia.Api.Tests`), and commit `src/Hestia.Api/Internal/Generated`. `GeneratedHandlerCodeTests` fails in CI
+     when the files are not current. Test hosts compile their handlers at run time (they add a recording consumer).
    - **After you add a consumer, run `HandlerCompileTests`** (`tests/Hestia.Api.Tests`, T47; CI runs it too). Wolverine
      compiles a consumer at its first message, so a dependency that it cannot build fails only on the server. The test
      compiles every consumer now, and names the consumer and the dependency. A dependency registered with a lambda
