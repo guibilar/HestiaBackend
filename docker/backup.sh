@@ -149,13 +149,17 @@ verify() {
         [ -f "$copy/$key" ] || missing=$((missing + 1))
       done
     fi
-    if [ "${tables:-0}" -eq 0 ]; then
-      message="The dump restored, but it has no tables."
+    # A new install dumps before the host made its tables: an empty dump of an empty database is right.
+    live=$(psql --no-psqlrc --tuples-only --no-align -c \
+      "SELECT count(*) FROM information_schema.tables WHERE table_schema NOT IN ('pg_catalog', 'information_schema', 'public')")
+    if [ "${tables:-0}" -eq 0 ] && [ "${live:-0}" -gt 0 ]; then
+      message="The dump restored, but it has no tables (the database has $live)."
     elif [ "$missing" -gt 0 ]; then
       message="$missing of $files document files are not in $(basename "$copy")."
     else
       verify_ok=true
       verify_message=$(clean "$(basename "$newest") restored: $schemas schemas, $tables tables, $files document files.")
+      [ "${tables:-0}" -eq 0 ] && verify_message=$(clean "$(basename "$newest") restored: the database had no tables yet.")
     fi
   fi
   dropdb --if-exists "$scratch" 2>/dev/null
