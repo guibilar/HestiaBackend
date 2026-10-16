@@ -826,6 +826,38 @@ before. The module has no events.
 **Today.** The tile `inbox.open` (order 150): the count of open notes, "to sort" (Warning from 10 notes). Link `/inbox`.
 **Search.** The open notes are in `GET /api/search` (module `Inbox`, kind `note`, the first line as the title).
 
+## Calendar
+
+The Calendar module (T103, schema `calendar`) has events, and one view of the dated things of all modules. An event is
+of whole days (`allDay`, `startDate`, `endDate`) or has a time (`startsAt`, `endsAt`, and its `timeZone`). It can repeat
+with an iCalendar RRULE (`FREQ=WEEKLY;BYDAY=TU`; daily, weekly, monthly, or yearly). A repeated event repeats at the
+same local time in its zone, also over a change of summer time. One occurrence can be skipped.
+
+**Time zones.** The repeats run on the local clock (Ical.Net), and this machine's time zone data (`TimeZoneInfo`) makes
+each local time a moment. Ical.Net has an older copy of the zone rules (NodaTime): with it, Alberta, which keeps UTC-6
+from November 2026 (tzdata 2026c), would be an hour off. Keep the `tzdata` of the image current.
+
+**Sources.** Each module gives its dated things through `ICalendarSource` (`Hestia.Modules.Calendar.Contracts`), in
+its `AddServices`: Tasks (`task-due`: open tasks on their due day), People (`birthday` every year, `reach-out`,
+`loan-due`), Documents (`document-expires`), Home (`warranty-ends`). The Calendar calls them at the same time; a source
+that fails or is slow (`Calendar:SourceTimeout`, 10 s) gives nothing, and the answer marks its module `Failed`.
+Other modules read the view with `ICalendarQueries` (Today, T106).
+
+**Import.** `POST /api/calendar/import` with `{ "ics": "<text of an .ics file>", "dryRun": false }` reads every
+VEVENT: time zones (IANA, or Windows names from Outlook; a time without a zone is in the host's zone), RRULE, and EXDATE.
+A new import of the same UID updates the event, so the same invitation twice gives one event. `STATUS:CANCELLED` or
+`METHOD:CANCEL` deletes it. A changed occurrence (RECURRENCE-ID) is its own event, and the repeated event skips that
+day. A repeat faster than daily is skipped, with the reason. `dryRun: true` only says what would change.
+
+**Endpoints** (prefix `/api/calendar`; a read-only user can call the GET endpoints only):
+
+| Endpoint | Description |
+| --- | --- |
+| `GET /?from=&to=` | The items from one day to another (both included; default today and 30 days later; at most 400 days): by first day, then the whole-day items, then by time. Each item has `module`, `kind`, `title`, `text`, the days and times, `link`, and for an event its `eventId`. |
+| `POST /events`, `GET /events/{id}`, `PUT /events/{id}`, `DELETE /events/{id}` | An event. `PUT` replaces all values of all occurrences; the skipped days stay. |
+| `POST /events/{id}/skip` | `{ "date": "2026-10-27" }`: that occurrence of a repeated event does not happen. |
+| `POST /import` | Imports an `.ics` text (see above). The answer has the counts and each event with its action (`Add`, `Update`, `Same`, `Delete`, `Skip`). |
+
 ## OpenAPI document
 
 The host describes the module endpoints (not the finance paths) at `/openapi/v1.json`, with `/api/Auth/*`

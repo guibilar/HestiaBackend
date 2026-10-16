@@ -1,4 +1,5 @@
 using Hestia.Modules.Alerts.Contracts;
+using Hestia.Modules.Calendar.Contracts;
 using Hestia.Modules.People.Application;
 using Hestia.Modules.People.Contracts;
 using Hestia.Modules.People.Endpoints;
@@ -56,6 +57,8 @@ public static class PeopleModuleExtensions
         services.AddScoped<IAlertSource, ReminderAlerts>();
         // The Timeline entries (T16).
         services.AddScoped<ITimelineSource, PeopleTimeline>();
+        // The Calendar items (T103).
+        services.AddScoped<ICalendarSource, PeopleCalendar>();
         // The search (T17).
         services.AddScoped<ISearchSource, PeopleSearch>();
         return services;
