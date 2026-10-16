@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using Hestia.Api;
+using Hestia.Api.Backups;
 using Hestia.Api.Events;
 using Hestia.Api.Gateway;
 using Hestia.Platform.Errors;
@@ -38,6 +39,14 @@ foreach (var module in modules)
 builder.Services.AddHealthChecks()
     .AddCheck<DatabaseHealthCheck>("database", tags: [HealthTags.Ready])
     .AddCheck<FinanceHealthCheck>("finance", tags: [HealthTags.Ready]);
+
+// T99: the status files of the backup jobs: a readiness check and System alerts (SystemHealthAlerts).
+builder.Services.Configure<BackupsOptions>(builder.Configuration.GetSection(BackupsOptions.SectionName));
+builder.Services.AddSingleton<BackupStatusReader>();
+if (!string.IsNullOrWhiteSpace(builder.Configuration[$"{BackupsOptions.SectionName}:{nameof(BackupsOptions.StatusPath)}"]))
+{
+    builder.Services.AddHealthChecks().AddCheck<BackupsHealthCheck>(BackupsHealthCheck.Name, tags: [HealthTags.Ready]);
+}
 
 var app = builder.Build();
 

@@ -1,3 +1,4 @@
+using Hestia.Api.Backups;
 using Hestia.Modules.Alerts.Contracts;
 using Hestia.Platform.Events;
 using Hestia.Platform.Persistence;
@@ -14,6 +15,9 @@ namespace Hestia.Api.Events;
 /// <c>Events:Outbox:MaxAttempts</c> times. The sender does not try them again; <c>retry-outbox &lt;schema&gt;</c> does.</item>
 /// <item><c>system.broker-down</c> (Warning): the host has had no working connection to the RabbitMQ broker for more
 /// than <c>Events:Broker:AlertAfter</c> (30 minutes).</item>
+/// <item><c>system.backup.&lt;name&gt;</c> (Bad, T99): the newest backup of a set (<c>hestia</c>, <c>finance</c>)
+/// failed, is too old, or has no status file.</item>
+/// <item><c>system.restore-check.&lt;name&gt;</c> (Bad, T99): the newest restore check of a set failed, or is too old.</item>
 /// </list>
 /// </summary>
 /// <remarks>
@@ -26,12 +30,15 @@ public sealed class SystemHealthAlerts(
     IEnumerable<ModuleDatabase> databases,
     IOptionsMonitor<EventsOptions> options,
     BrokerConnectionState broker,
+    BackupStatusReader backups,
     ILogger<SystemHealthAlerts> logger) : IAlertSource
 {
     public const string SourceName = "System.Health";
     public const string ModuleName = "System";
     public const string OutboxPrefix = "system.outbox-stuck.";
     public const string BrokerKey = "system.broker-down";
+    public const string BackupPrefix = "system.backup.";
+    public const string RestoreCheckPrefix = "system.restore-check.";
 
     public string Name => SourceName;
 
@@ -88,7 +95,49 @@ public sealed class SystemHealthAlerts(
             // open until the connection is back.
         }
 
+        // T99: the backups. Without a status folder, the host does not check them (and old alerts resolve).
+        covered.Add(BackupPrefix);
+        covered.Add(RestoreCheckPrefix);
+        if (backups.Enabled)
+        {
+            alerts.AddRange(backups.Problems(context.Now).Select(problem => BackupAlert(problem, context.TimeZone)));
+        }
+
         return new AlertCheckResult(alerts, covered, complete);
+    }
+
+    /// <summary>The alert of one backup problem. The time is a day in the time zone of the host.</summary>
+    public static AlertCandidate BackupAlert(BackupProblem problem, TimeZoneInfo timeZone)
+    {
+        var values = new Dictionary<string, AlertValue> { ["name"] = AlertValue.Plain(problem.Name) };
+        if (problem.Since is { } since)
+        {
+            values["date"] = AlertValue.Day(DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(since, timeZone).DateTime));
+        }
+        if (!string.IsNullOrWhiteSpace(problem.Message))
+        {
+            values["message"] = AlertValue.Plain(problem.Message);
+        }
+        var key = (problem.Kind is BackupProblemKind.RestoreCheckFailed or BackupProblemKind.RestoreCheckOld ? RestoreCheckPrefix : BackupPrefix)
+            + problem.Name.ToLowerInvariant();
+        var (kind, title, text) = problem.Kind switch
+        {
+            BackupProblemKind.BackupFailed => ("backup-failed", "Backup failed",
+                values.ContainsKey("message")
+                    ? "The {name} backup of {date} failed: {message}. Check: docker compose logs backup"
+                    : "The {name} backup of {date} failed. Check: docker compose logs backup"),
+            BackupProblemKind.BackupOld => ("backup-old", "No recent backup",
+                "The newest {name} backup is from {date}. The nightly backup did not run. Check: docker compose logs backup"),
+            BackupProblemKind.RestoreCheckFailed => ("restore-check-failed", "Backup does not restore",
+                values.ContainsKey("message")
+                    ? "The restore check of the {name} backup failed on {date}: {message}"
+                    : "The restore check of the {name} backup failed on {date}."),
+            BackupProblemKind.RestoreCheckOld => ("restore-check-old", "No recent restore check",
+                "The newest restore check of the {name} backup is from {date}. Check: docker compose logs backup"),
+            _ => ("backup-missing", "No backup status",
+                "Hestia has no backup status for {name}. The backup job did not run, or its status folder is not mounted.")
+        };
+        return new AlertCandidate(key, kind, title, text, values, AlertSeverity.Bad, Link: null, SortKey: $"0|{key}");
     }
 
     public static string OutboxKey(string schema) => OutboxPrefix + schema;
