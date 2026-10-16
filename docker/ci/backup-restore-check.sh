@@ -160,8 +160,10 @@ docker compose exec -T backup backup.sh verify || fail "The restore check failed
 [ "$(status .lastVerifyOk)" = true ] || fail "The status file does not say that the restore check worked."
 [ "$(status .lastBackupOk)" = true ] || fail "The status file does not have the backup."
 [ "$(backups_check)" = Healthy ] || fail "The backups readiness check is not Healthy after a good restore check."
-# A document file that is not in the copy: the check must fail, and the host must see it.
-docker compose exec -T -u root backup rm -f "$snapshot/$(echo "$first_sha" | cut -c1-2)/$first_sha"
+# A document file that is not in the copy of the newest dump (restore.sh restarted the backup service, and it made a
+# new dump): the check must fail, and the host must see it.
+newest=$(docker compose exec -T backup sh -c 'ls -t /backups/hestia-*.dump | head -n 1')
+docker compose exec -T -u root backup rm -f "${newest%.dump}.documents/$(echo "$first_sha" | cut -c1-2)/$first_sha"
 if docker compose exec -T backup backup.sh verify; then fail "The restore check passed with a missing document file."; fi
 [ "$(status .lastVerifyOk)" = false ] || fail "The status file does not say that the restore check failed."
 [ "$(backups_check)" = Degraded ] || fail "The backups readiness check is not Degraded after a failed restore check."
