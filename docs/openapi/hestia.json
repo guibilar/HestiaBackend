@@ -95,6 +95,245 @@
         }
       }
     },
+    "/api/calendar": {
+      "get": {
+        "tags": [
+          "Calendar"
+        ],
+        "summary": "The Calendar from one day to another (both included): the events, and the dated things of all modules.",
+        "description": "from: default today; to: default from + 30 days; at most 400 days. Items: events (with each occurrence of a repeated event), tasks due, birthdays, reach-out days, loans due, documents that expire, and warranties that end. On each day, the things of the whole day come first, then by time.",
+        "operationId": "GetCalendar",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CalendarDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/calendar/events": {
+      "post": {
+        "tags": [
+          "Calendar"
+        ],
+        "summary": "Adds an event: all day (startDate, endDate) or with a time (startsAt, endsAt), and a repeat (an RRULE).",
+        "operationId": "CreateCalendarEvent",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CalendarEventRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CalendarEventDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/calendar/events/{id}": {
+      "get": {
+        "tags": [
+          "Calendar"
+        ],
+        "operationId": "GetCalendarEvent",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CalendarEventDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Calendar"
+        ],
+        "summary": "Changes an event (all values; all occurrences of a repeated event). The skipped days stay.",
+        "operationId": "UpdateCalendarEvent",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CalendarEventRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CalendarEventDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Calendar"
+        ],
+        "summary": "Deletes an event (all occurrences of a repeated event).",
+        "operationId": "DeleteCalendarEvent",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
+    "/api/calendar/events/{id}/skip": {
+      "post": {
+        "tags": [
+          "Calendar"
+        ],
+        "summary": "One occurrence of a repeated event does not happen (date: its day). The others stay.",
+        "operationId": "SkipCalendarOccurrence",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CalendarSkipRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CalendarEventDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/calendar/import": {
+      "post": {
+        "tags": [
+          "Calendar"
+        ],
+        "summary": "Imports the events of an .ics file (ics: its text). dryRun=true only says what would change.",
+        "description": "An event with a UID that Hestia has already (from an earlier import) is updated, not added again. A cancelled event (STATUS:CANCELLED, METHOD:CANCEL) is deleted. Repeats faster than daily are skipped.",
+        "operationId": "ImportCalendar",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CalendarImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CalendarImportResultDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/documents": {
       "post": {
         "tags": [
@@ -3307,6 +3546,496 @@
               "string"
             ],
             "format": "int32"
+          }
+        }
+      },
+      "CalendarDto": {
+        "required": [
+          "today",
+          "from",
+          "to",
+          "timeZone",
+          "items",
+          "modules"
+        ],
+        "type": "object",
+        "properties": {
+          "today": {
+            "type": "string",
+            "format": "date"
+          },
+          "from": {
+            "type": "string",
+            "format": "date"
+          },
+          "to": {
+            "type": "string",
+            "format": "date"
+          },
+          "timeZone": {
+            "type": "string"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CalendarItem"
+            }
+          },
+          "modules": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CalendarModuleDto"
+            }
+          }
+        }
+      },
+      "CalendarEventDto": {
+        "required": [
+          "id",
+          "title",
+          "allDay",
+          "startDate",
+          "endDate",
+          "startsAt",
+          "endsAt",
+          "timeZone",
+          "location",
+          "notes",
+          "repeat",
+          "skippedDates",
+          "source",
+          "uid",
+          "createdAt",
+          "updatedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
+          },
+          "allDay": {
+            "type": "boolean"
+          },
+          "startDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          },
+          "endDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          },
+          "startsAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "endsAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "timeZone": {
+            "type": "string"
+          },
+          "location": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "notes": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "repeat": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "skippedDates": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          "source": {
+            "$ref": "#/components/schemas/CalendarEventSource"
+          },
+          "uid": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CalendarEventRequest": {
+        "required": [
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "allDay": {
+            "type": "boolean",
+            "default": false
+          },
+          "startDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          },
+          "endDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          },
+          "startsAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "endsAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "timeZone": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "location": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "notes": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "repeat": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "CalendarEventSource": {
+        "enum": [
+          "Manual",
+          "Import"
+        ]
+      },
+      "CalendarImportAction": {
+        "enum": [
+          "Add",
+          "Update",
+          "Same",
+          "Delete",
+          "Skip"
+        ]
+      },
+      "CalendarImportItemDto": {
+        "required": [
+          "action",
+          "title",
+          "allDay",
+          "startDate",
+          "startsAt",
+          "repeat",
+          "eventId",
+          "reason"
+        ],
+        "type": "object",
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/CalendarImportAction"
+          },
+          "title": {
+            "type": "string"
+          },
+          "allDay": {
+            "type": "boolean"
+          },
+          "startDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          },
+          "startsAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "repeat": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "eventId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "reason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "CalendarImportRequest": {
+        "required": [
+          "ics"
+        ],
+        "type": "object",
+        "properties": {
+          "ics": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "dryRun": {
+            "type": "boolean",
+            "default": false
+          }
+        }
+      },
+      "CalendarImportResultDto": {
+        "required": [
+          "dryRun",
+          "added",
+          "updated",
+          "unchanged",
+          "deleted",
+          "skipped",
+          "events"
+        ],
+        "type": "object",
+        "properties": {
+          "dryRun": {
+            "type": "boolean"
+          },
+          "added": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "updated": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "unchanged": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "deleted": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "skipped": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CalendarImportItemDto"
+            }
+          }
+        }
+      },
+      "CalendarItem": {
+        "required": [
+          "id",
+          "module",
+          "kind",
+          "title",
+          "text",
+          "allDay",
+          "startDate",
+          "endDate",
+          "startsAt",
+          "endsAt",
+          "link"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "module": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "text": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "allDay": {
+            "type": "boolean"
+          },
+          "startDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "endDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "startsAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "endsAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "link": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "eventId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "recurring": {
+            "type": "boolean",
+            "default": false
+          },
+          "done": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          }
+        }
+      },
+      "CalendarModuleDto": {
+        "required": [
+          "module",
+          "status"
+        ],
+        "type": "object",
+        "properties": {
+          "module": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/CalendarModuleStatus"
+          }
+        }
+      },
+      "CalendarModuleStatus": {
+        "enum": [
+          "Complete",
+          "Partial",
+          "Failed"
+        ]
+      },
+      "CalendarSkipRequest": {
+        "required": [
+          "date"
+        ],
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
           }
         }
       },
@@ -7154,6 +7883,9 @@
     },
     {
       "name": "Today"
+    },
+    {
+      "name": "Calendar"
     },
     {
       "name": "Documents"

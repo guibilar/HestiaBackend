@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Internal: domain, application (events, repeats, .ics import, the agenda), infrastructure, endpoints. Only the host
+       references this project. Other modules use Hestia.Modules.Calendar.Contracts. -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- iCalendar (RFC 5545): reads .ics files, and expands the repeats (RRULE) of the events. -->
+    <PackageReference Include="Ical.Net" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Hestia.Platform\Hestia.Platform.csproj" />
+    <ProjectReference Include="..\Hestia.Modules.Calendar.Contracts\Hestia.Modules.Calendar.Contracts.csproj" />
+  </ItemGroup>
+
+</Project>

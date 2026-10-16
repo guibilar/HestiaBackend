@@ -1,4 +1,5 @@
 using Hestia.Modules.Alerts.Contracts;
+using Hestia.Modules.Calendar.Contracts;
 using Hestia.Modules.Documents.Application;
 using Hestia.Modules.Documents.Application.Ocr;
 using Hestia.Modules.Documents.Contracts;
@@ -82,6 +83,8 @@ public static class DocumentsModuleExtensions
         services.AddScoped<IAlertSource, DocumentFileAlerts>();
         // The Timeline entries (T16).
         services.AddScoped<ITimelineSource, DocumentTimeline>();
+        // The Calendar items (T103).
+        services.AddScoped<ICalendarSource, DocumentCalendar>();
         // The search (T17).
         services.AddScoped<ISearchSource, DocumentSearch>();
         return services;

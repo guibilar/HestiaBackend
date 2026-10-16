@@ -32,6 +32,11 @@
     <PackageVersion Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="4.153.1" />
   </ItemGroup>
 
+  <!-- Calendar (T103): reads .ics files and expands repeats (RRULE). MIT. -->
+  <ItemGroup Label="Calendar">
+    <PackageVersion Include="Ical.Net" Version="5.2.3" />
+  </ItemGroup>
+
   <!-- Events (D7, T04). Wolverine is MIT-licensed. -->
   <ItemGroup Label="Events">
     <PackageVersion Include="WolverineFx" Version="6.49.0" />
