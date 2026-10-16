@@ -43,8 +43,15 @@ services:
       Documents__StoragePath: /data/documents
       # T11: the Tesseract language(s) of the OCR. The image has English (eng) only.
       Documents__Ocr__Language: ${DOCUMENTS_OCR_LANGUAGE:-eng}
+      # T99: the status files of the backup jobs, for the "backups" readiness check and the System alerts on Today.
+      Backups__StatusPath: /status
     volumes:
       - hestia_documents:/data/documents
+      # T99: the status of the Hestia backups (backup.sh writes it), and of the finance backups: set
+      # FINANCE_BACKUP_STATUS_DIR to the status folder of finance (<finance folder>/backups/status). Without it, the
+      # same volume is mounted twice, and the host checks the Hestia backups only.
+      - hestia_backup_status:/status/hestia:ro
+      - ${FINANCE_BACKUP_STATUS_DIR:-hestia_backup_status}:/status/finance:ro
     depends_on:
       hestia-db:
         condition: service_healthy
@@ -99,12 +106,16 @@ services:
       TZ: ${TZ:-America/Toronto}
       # T11: the owner of the document files: the "app" user of the .NET image. restore.sh gives them back to it.
       DOCUMENTS_OWNER: "1654:1654"
+      # T99: after each nightly dump, restore it into a scratch database and check it. "false" turns it off.
+      BACKUP_VERIFY: ${BACKUP_VERIFY:-true}
     volumes:
       # A volume name, or a folder on this machine (for example BACKUP_DIR=./backups).
       - ${BACKUP_DIR:-hestia_backups}:/backups
       - ./docker/backup.sh:/usr/local/bin/backup.sh:ro
       # T11: the document files. Each dump gets a copy of them next to it (backup.sh), and restore.sh puts them back.
       - hestia_documents:/documents
+      # T99: the status file (hestia.json) of the newest dump and restore check, for Hestia.Api.
+      - hestia_backup_status:/status
     depends_on:
       hestia-db:
         condition: service_healthy
@@ -131,3 +142,6 @@ volumes:
   # T11: the files of the Documents module. The rows are in the database; backup.sh copies both.
   hestia_documents:
     name: hestia_documents
+  # T99: the status files of the backup jobs (no secrets). The backup container writes, Hestia.Api reads.
+  hestia_backup_status:
+    name: hestia_backup_status

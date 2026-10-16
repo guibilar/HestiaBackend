@@ -1225,7 +1225,27 @@ encrypt the copy. The finance backend README shows a way with `age`.
 
 ```bash
 docker compose exec backup backup.sh once      # make an extra dump now
+docker compose exec backup backup.sh verify    # restore the newest dump into a scratch database and check it (T99)
 ```
+
+#### The restore check and the backup status (T99)
+
+A backup that nobody restored is only a hope. After each nightly dump, the backup service restores it into a scratch
+database (`Hestia_restore_check`, never the real one). It checks that the dump has the module schemas with their
+tables, and that every document file of the dump is in its `.documents` folder. Then it drops the scratch database.
+`BACKUP_VERIFY=false` turns the check off.
+
+The service writes the result of the dump and of the check into `hestia.json` in the volume `hestia_backup_status`.
+The file has no secrets. Hestia.Api reads it (`Backups:StatusPath`, `/status` in Docker):
+
+- the readiness check `backups` is `Degraded` (still 200) when a dump failed, the newest dump is older than 26 hours
+  (`Backups:MaxAge`), the newest restore check failed, or it is older than 3 days (`Backups:VerifyMaxAge`);
+- the same problems are System alerts on Today and in `GET /api/alerts`: `system.backup.<name>` and
+  `system.restore-check.<name>` (Bad). The phone notifies them like the other alerts.
+
+**Finance backups too.** The finance backup service writes `finance.json` in the same way (finance `backups/status/`).
+Set `FINANCE_BACKUP_STATUS_DIR` in this `.env` to that folder, for example
+`FINANCE_BACKUP_STATUS_DIR=/opt/finance/backend/backups/status`, and the host checks both sets.
 
 #### Restore a backup
 

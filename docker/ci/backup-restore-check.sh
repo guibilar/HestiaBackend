@@ -8,6 +8,8 @@
 #   3. Adds a second item and a second document, runs docker/restore.sh (dump from the volume, then from a file on
 #      this machine), and checks that the database and the document files are back at the dump: the first item and
 #      the first document only, with its file.
+#   5. T99: runs the restore check (backup.sh verify) on a good dump, then on a dump with a missing document file, and
+#      checks the status file and the "backups" readiness check of the host.
 set -eu
 
 api=${1:-http://localhost:5097}
@@ -150,5 +152,22 @@ wait_ready
 [ "$(file_in_volume "$third_sha")" = no ] || fail "restore.sh kept the file of a document from after the dump."
 [ "$(download_sha before-backup)" = "$first_sha" ] || fail "The copied document files did not bring the file back."
 rm -rf "$(dirname "$copy")"
+
+echo "5. The restore check (T99)"
+status() { docker compose exec -T hestia-api cat /status/hestia/hestia.json | jq -r "$1"; }
+backups_check() { curl -sf "$api/health/ready" | jq -r '.checks[] | select(.name == "backups") | .status'; }
+docker compose exec -T backup backup.sh verify || fail "The restore check failed on a good dump."
+[ "$(status .lastVerifyOk)" = true ] || fail "The status file does not say that the restore check worked."
+[ "$(status .lastBackupOk)" = true ] || fail "The status file does not have the backup."
+[ "$(backups_check)" = Healthy ] || fail "The backups readiness check is not Healthy after a good restore check."
+# A document file that is not in the copy of the newest dump (restore.sh restarted the backup service, and it made a
+# new dump): the check must fail, and the host must see it.
+newest=$(docker compose exec -T backup sh -c 'ls -t /backups/hestia-*.dump | head -n 1')
+docker compose exec -T -u root backup rm -f "${newest%.dump}.documents/$(echo "$first_sha" | cut -c1-2)/$first_sha"
+if docker compose exec -T backup backup.sh verify; then fail "The restore check passed with a missing document file."; fi
+[ "$(status .lastVerifyOk)" = false ] || fail "The status file does not say that the restore check failed."
+[ "$(backups_check)" = Degraded ] || fail "The backups readiness check is not Degraded after a failed restore check."
+[ "$(docker compose exec -T backup psql --no-psqlrc -tAc "SELECT count(*) FROM pg_database WHERE datname LIKE '%_restore_check'")" = 0 ] ||
+  fail "The restore check left its scratch database."
 
 echo "Backup and restore work."
