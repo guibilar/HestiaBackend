@@ -2114,6 +2114,38 @@
         }
       }
     },
+    "/api/people/import": {
+      "post": {
+        "tags": [
+          "People"
+        ],
+        "summary": "Imports contacts from a vCard file (vCard: its text) or a list (people). dryRun=true (default) gives the preview.",
+        "description": "A contact that matches a person (the same email, then the same phone, then the same name) only fills the empty details of that person and adds its groups. only: the indexes to import (null: all). At most 2000 contacts. The answer has each contact with its action: Add, Merge, Same, or Skip (with the reason).",
+        "operationId": "ImportPeople",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PeopleImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PeopleImportResultDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/people/by-link": {
       "get": {
         "tags": [
@@ -6211,6 +6243,166 @@
           },
           "hasNextPage": {
             "type": "boolean"
+          }
+        }
+      },
+      "PeopleImportAction": {
+        "enum": [
+          "Add",
+          "Merge",
+          "Same",
+          "Skip"
+        ]
+      },
+      "PeopleImportItemDto": {
+        "required": [
+          "index",
+          "action",
+          "person",
+          "existingId",
+          "existingName",
+          "matchedBy",
+          "newFields",
+          "reason"
+        ],
+        "type": "object",
+        "properties": {
+          "index": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "action": {
+            "$ref": "#/components/schemas/PeopleImportAction"
+          },
+          "person": {
+            "$ref": "#/components/schemas/CreatePersonRequest"
+          },
+          "existingId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "existingName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "matchedBy": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "newFields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "reason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "PeopleImportRequest": {
+        "type": "object",
+        "properties": {
+          "vCard": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "people": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/CreatePersonRequest"
+            }
+          },
+          "dryRun": {
+            "type": "boolean",
+            "default": true
+          },
+          "only": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          }
+        }
+      },
+      "PeopleImportResultDto": {
+        "required": [
+          "dryRun",
+          "added",
+          "merged",
+          "unchanged",
+          "skipped",
+          "people"
+        ],
+        "type": "object",
+        "properties": {
+          "dryRun": {
+            "type": "boolean"
+          },
+          "added": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "merged": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "unchanged": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "skipped": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "people": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PeopleImportItemDto"
+            }
           }
         }
       },

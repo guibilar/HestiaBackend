@@ -51,6 +51,14 @@ public static class PeopleEndpoints
             .WithDescription("birthday is { month, day, year? }. contactEveryDays (1 to 3650) is the reach-out reminder. " +
                 "links are { kind, targetId } (Documents.Document, Money.Transaction, Tasks.Task, or Home.Item).");
 
+        people.MapPost("/import", (PeopleImportRequest request, PeopleImport import, CancellationToken cancellationToken) =>
+                import.ImportAsync(request, cancellationToken))
+            .WithName("ImportPeople")
+            .WithSummary("Imports contacts from a vCard file (vCard: its text) or a list (people). dryRun=true (default) gives the preview.")
+            .WithDescription("A contact that matches a person (the same email, then the same phone, then the same name) only " +
+                "fills the empty details of that person and adds its groups. only: the indexes to import (null: all). At most " +
+                "2000 contacts. The answer has each contact with its action: Add, Merge, Same, or Skip (with the reason).");
+
         people.MapGet("/by-link", (PersonService service, CancellationToken cancellationToken, string? kind, string? id) =>
                 service.ListByLinkAsync(kind, id, cancellationToken))
             .WithName("ListPeopleByLink")
