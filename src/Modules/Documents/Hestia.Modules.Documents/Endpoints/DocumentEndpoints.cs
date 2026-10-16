@@ -1,4 +1,5 @@
 using Hestia.Modules.Documents.Application;
+using Hestia.Modules.Documents.Application.Receipts;
 using Hestia.Modules.Documents.Contracts;
 using Hestia.Platform.Auth;
 using Hestia.Platform.Exceptions;
@@ -64,6 +65,14 @@ public static class DocumentEndpoints
                 service.GetAsync(id, cancellationToken))
             .WithName("GetDocument")
             .WithSummary("One document, with its OCR text.");
+
+        documents.MapGet("/{id:guid}/suggestions", (Guid id, DocumentSuggestions suggestions, CancellationToken cancellationToken) =>
+                suggestions.GetAsync(id, cancellationToken))
+            .WithName("GetDocumentSuggestions")
+            .WithSummary("What the text of a document says (T100): the store, the day, and the total of a receipt, matching " +
+                "finance transactions, and the end of a warranty.")
+            .WithDescription("Before the OCR is Done, the values are null. Transactions: the same amount, up to 3 days from the " +
+                "day, closest first (at most 5); transactionsComplete is false when finance did not answer.");
 
         documents.MapPut("/{id:guid}", (Guid id, UpdateDocumentRequest request, DocumentService service,
                 CancellationToken cancellationToken) => service.UpdateAsync(id, request, cancellationToken))
