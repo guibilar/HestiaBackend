@@ -1,10 +1,13 @@
 using System.Diagnostics;
 using System.Security.Claims;
 using Hestia.Modules.Alerts.Contracts;
+using Hestia.Modules.Calendar.Contracts;
+using Hestia.Modules.Journal.Contracts;
 using Hestia.Modules.Today.Contracts;
 using Hestia.Platform.Auth;
 using Hestia.Platform.Finance;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -15,10 +18,13 @@ namespace Hestia.Modules.Today.Application;
 /// (<see cref="IAlertQueries"/>, T15) at the same time, and puts the cards in module order. The alerts of a module are its
 /// "Needs attention" items. A provider that fails or does not answer in time gives no cards, and the answer marks its
 /// module as failed. A complete answer stays in a cache for each user for a short time.
+/// T106: it also reads "Your day" from the Calendar and "On this day" from the Journal, each in its own scope: their
+/// queries use the DbContexts of the modules (Tasks, People, …) that the card providers use at the same time.
 /// </summary>
 public sealed class TodayService(
     IEnumerable<ITodayCardProvider> providers,
     IAlertQueries alerts,
+    IServiceScopeFactory scopes,
     IMemoryCache cache,
     IOptions<TodayOptions> options,
     TimeProvider time,
@@ -42,7 +48,9 @@ public sealed class TodayService(
         var context = new TodayContext(date, timeZone, user);
         var fromProviders = Task.WhenAll(providers.Select(provider => RunAsync(provider, context, cancellationToken)));
         var fromAlerts = RunAlertsAsync(refresh, cancellationToken);
-        await Task.WhenAll(fromProviders, fromAlerts);
+        var agenda = AgendaAsync(date, cancellationToken);
+        var memories = MemoriesAsync(date, cancellationToken);
+        await Task.WhenAll(fromProviders, fromAlerts, agenda, memories);
 
         // One entry per module: its provider and its alerts together.
         var modules = fromProviders.Result.Concat(fromAlerts.Result)
@@ -56,7 +64,8 @@ public sealed class TodayService(
         var cards = modules.SelectMany(m => m.Cards).Where(card => card.Type == TodayCardType.Tile)
             .Concat(modules.SelectMany(m => m.Cards).Where(card => card.Type == TodayCardType.Attention))
             .ToList();
-        var answer = new TodayDto(date, now, modules.Select(m => new TodayModuleDto(m.Module, m.Status)).ToList(), cards);
+        var answer = new TodayDto(date, now, modules.Select(m => new TodayModuleDto(m.Module, m.Status)).ToList(), cards,
+            agenda.Result, memories.Result);
 
         // Keep only a complete answer: after a failure, the next request tries again.
         if (modules.All(m => m.Status == TodayModuleStatus.Complete) && _options.CacheDuration > TimeSpan.Zero)
@@ -64,6 +73,73 @@ public sealed class TodayService(
             cache.Set(key, answer, _options.CacheDuration);
         }
         return answer;
+    }
+
+    /// <summary>How many days after today "Upcoming" looks.</summary>
+    public const int UpcomingDays = 7;
+
+    /// <summary>The most items of "Upcoming".</summary>
+    public const int MaxUpcoming = 8;
+
+    /// <summary>
+    /// "Your day" (T106): the Calendar items of today and of the next <see cref="UpcomingDays"/> days. Null when the
+    /// Calendar failed or did not answer in time.
+    /// </summary>
+    private async Task<TodayAgendaDto?> AgendaAsync(DateOnly date, CancellationToken requestAborted)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(requestAborted);
+        timeout.CancelAfter(_options.ProviderTimeout);
+        try
+        {
+            await using var scope = scopes.CreateAsyncScope();
+            if (scope.ServiceProvider.GetService<ICalendarQueries>() is not { } calendar)
+            {
+                return null;
+            }
+            var view = await calendar.GetAsync(date, date.AddDays(UpcomingDays), timeout.Token);
+            var today = view.Items.Where(i => i.StartDate <= date && i.EndDate >= date).Select(Item).ToList();
+            var upcoming = view.Items.Where(i => i.StartDate > date).Take(MaxUpcoming).Select(Item).ToList();
+            return new TodayAgendaDto(today, upcoming, view.Modules.All(m => m.Status == CalendarModuleStatus.Complete));
+        }
+        catch (OperationCanceledException) when (requestAborted.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(exception, "Today: the agenda did not load");
+            return null;
+        }
+    }
+
+    private static TodayAgendaItem Item(CalendarItem i) =>
+        new(i.Id, i.Module, i.Kind, i.Title, i.Text, i.AllDay, i.StartDate, i.EndDate, i.StartsAt, i.EndsAt, i.Link, i.EventId, i.Done);
+
+    /// <summary>"On this day" (T106): the journal entries of this day in earlier years. Empty when they did not load.</summary>
+    private async Task<IReadOnlyList<TodayMemoryDto>> MemoriesAsync(DateOnly date, CancellationToken requestAborted)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(requestAborted);
+        timeout.CancelAfter(_options.ProviderTimeout);
+        try
+        {
+            await using var scope = scopes.CreateAsyncScope();
+            if (scope.ServiceProvider.GetService<IJournalQueries>() is not { } journal)
+            {
+                return [];
+            }
+            var entries = await journal.OnThisDayAsync(date, timeout.Token);
+            return entries.Select(e => new TodayMemoryDto("Journal", "journal-entry", e.YearsAgo, e.Entry.Day, e.Entry.Excerpt,
+                $"/journal?day={e.Entry.Day:yyyy-MM-dd}")).ToList();
+        }
+        catch (OperationCanceledException) when (requestAborted.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(exception, "Today: \"On this day\" did not load");
+            return [];
+        }
     }
 
     /// <summary>One part of a module on Today: its provider, or its alerts.</summary>

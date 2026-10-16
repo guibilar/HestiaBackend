@@ -7656,6 +7656,113 @@
           "Failed"
         ]
       },
+      "TodayAgendaDto": {
+        "required": [
+          "today",
+          "upcoming",
+          "complete"
+        ],
+        "type": "object",
+        "properties": {
+          "today": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TodayAgendaItem"
+            }
+          },
+          "upcoming": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TodayAgendaItem"
+            }
+          },
+          "complete": {
+            "type": "boolean"
+          }
+        }
+      },
+      "TodayAgendaItem": {
+        "required": [
+          "id",
+          "module",
+          "kind",
+          "title",
+          "text",
+          "allDay",
+          "startDate",
+          "endDate",
+          "startsAt",
+          "endsAt",
+          "link",
+          "eventId",
+          "done"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "module": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "text": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "allDay": {
+            "type": "boolean"
+          },
+          "startDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "endDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "startsAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "endsAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "link": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "eventId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "done": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          }
+        }
+      },
       "TodayCard": {
         "required": [
           "id",
@@ -7764,6 +7871,65 @@
             "items": {
               "$ref": "#/components/schemas/TodayCard"
             }
+          },
+          "agenda": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/TodayAgendaDto"
+              }
+            ]
+          },
+          "memories": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/TodayMemoryDto"
+            }
+          }
+        }
+      },
+      "TodayMemoryDto": {
+        "required": [
+          "module",
+          "kind",
+          "yearsAgo",
+          "day",
+          "text",
+          "link"
+        ],
+        "type": "object",
+        "properties": {
+          "module": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "yearsAgo": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "day": {
+            "type": "string",
+            "format": "date"
+          },
+          "text": {
+            "type": "string"
+          },
+          "link": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
