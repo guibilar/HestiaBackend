@@ -142,9 +142,9 @@ verify() {
     missing=0
     files=0
     if [ "$(psql --no-psqlrc --tuples-only --no-align --dbname="$scratch" -c \
-         "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'documents' AND table_name = 'Files'")" = 1 ]; then
+         "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'documents' AND table_name = 'DocumentFiles'")" = 1 ]; then
       copy="${newest%.dump}.documents"
-      for key in $(psql --no-psqlrc --tuples-only --no-align --dbname="$scratch" -c 'SELECT DISTINCT "StorageKey" FROM documents."Files"'); do
+      for key in $(psql --no-psqlrc --tuples-only --no-align --dbname="$scratch" -c 'SELECT DISTINCT "StorageKey" FROM documents."DocumentFiles"'); do
         files=$((files + 1))
         [ -f "$copy/$key" ] || missing=$((missing + 1))
       done
