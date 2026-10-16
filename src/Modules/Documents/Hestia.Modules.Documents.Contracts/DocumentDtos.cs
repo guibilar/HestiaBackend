@@ -129,3 +129,41 @@ public static class DocumentLinkKinds
 
     public static readonly IReadOnlyList<string> All = [MoneyTransaction, HomeItem, PeoplePerson];
 }
+
+/// <summary>
+/// What Hestia found in the text of a document (<c>GET /api/documents/{id}/suggestions</c>, T100): the store, the day, and
+/// the total of a receipt, the finance transactions with that amount near that day, and the end of a warranty that the
+/// text names. The clients offer one-tap actions with them: link a transaction, add a transaction, set the expiry, add a
+/// home item. Every value is null when the text does not say it clearly.
+/// </summary>
+/// <param name="DocumentId">The document.</param>
+/// <param name="OcrStatus">The OCR state. Before <c>Done</c>, there are no suggestions yet: ask again later.</param>
+/// <param name="Merchant">The store, from the first lines of the text.</param>
+/// <param name="Date">The day of the purchase.</param>
+/// <param name="Total">The amount paid.</param>
+/// <param name="Kind">The kind that the document seems to be, when its kind is <c>Other</c>; else null.</param>
+/// <param name="WarrantyMonths">The length of a warranty that the text names, in months.</param>
+/// <param name="WarrantyUntil">The end of that warranty: the day the text names, or the purchase day plus the length.</param>
+/// <param name="Transactions">Finance transactions of the same amount, up to 3 days from the day, closest first (at most 5).</param>
+/// <param name="TransactionsComplete">False when finance did not answer: the list can miss transactions.</param>
+public sealed record DocumentSuggestionsDto(
+    Guid DocumentId,
+    OcrStatus OcrStatus,
+    string? Merchant,
+    DateOnly? Date,
+    decimal? Total,
+    DocumentKind? Kind,
+    int? WarrantyMonths,
+    DateOnly? WarrantyUntil,
+    IReadOnlyList<TransactionMatchDto> Transactions,
+    bool TransactionsComplete);
+
+/// <summary>A finance transaction that can be the purchase of a receipt.</summary>
+/// <param name="Id">The transaction.</param>
+/// <param name="Date">Its day.</param>
+/// <param name="Description">Its description (the merchant, as the bank writes it).</param>
+/// <param name="Amount">Its amount.</param>
+/// <param name="AccountName">Its account.</param>
+/// <param name="DaysOff">How many days it is from the day of the receipt.</param>
+/// <param name="Linked">True when the document links to it already.</param>
+public sealed record TransactionMatchDto(Guid Id, DateOnly Date, string Description, decimal Amount, string AccountName, int DaysOff, bool Linked);

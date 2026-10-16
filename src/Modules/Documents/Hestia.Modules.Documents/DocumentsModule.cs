@@ -2,6 +2,7 @@ using Hestia.Modules.Alerts.Contracts;
 using Hestia.Modules.Calendar.Contracts;
 using Hestia.Modules.Documents.Application;
 using Hestia.Modules.Documents.Application.Ocr;
+using Hestia.Modules.Documents.Application.Receipts;
 using Hestia.Modules.Documents.Contracts;
 using Hestia.Modules.Documents.Endpoints;
 using Hestia.Modules.Documents.Infrastructure;
@@ -67,6 +68,8 @@ public static class DocumentsModuleExtensions
         services.AddHostedService(provider => provider.GetRequiredService<FileCheckWorker>());
         services.AddScoped<LinkTargets>();
         services.AddScoped<DocumentService>();
+        // T100: what the text of a receipt says, and the matching transactions.
+        services.AddScoped<DocumentSuggestions>();
         services.AddScoped<IDocumentQueries, DocumentQueries>();
 
         // The OCR runs in the background (OcrWorker), not in the upload request.

@@ -374,6 +374,14 @@ upload ──> files to the volume (by SHA-256) + rows and DocumentAdded (one sa
                                                           OCR worker (background) ──> OcrText, Done or Failed, DocumentChanged
 ```
 
+**Receipt suggestions (T100).** `GET /api/documents/{id}/suggestions` reads the OCR text with rules (no AI, no network;
+`ReceiptReader`): the store (the first lines), the day of the purchase (the first date that is not in the future; for
+`03/04/2026` the month comes first), and the total (the largest "total" that is not a subtotal, a tax, a saving, or the
+change). It also asks finance, as the signed-in user, for the transactions of the same amount up to 3 days from that
+day (closest first, at most 5), and finds a warranty ("2 year warranty", "warranty until …"). The clients offer one tap:
+link the transaction, add a transaction with these values, set the expiry, or add a home item. Before the OCR is `Done`,
+every value is null; when finance does not answer, `transactionsComplete` is false.
+
 **Endpoints** (prefix `/api/documents`; a read-only user can call the GET endpoints only):
 
 | Endpoint | Description |
