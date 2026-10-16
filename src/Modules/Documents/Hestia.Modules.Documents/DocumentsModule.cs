@@ -70,6 +70,8 @@ public static class DocumentsModuleExtensions
         services.AddScoped<DocumentService>();
         // T100: what the text of a receipt says, and the matching transactions.
         services.AddScoped<DocumentSuggestions>();
+        // T102: other modules add documents from files (the attachments of an email).
+        services.AddScoped<IDocumentIntake, DocumentIntakeService>();
         services.AddScoped<IDocumentQueries, DocumentQueries>();
 
         // The OCR runs in the background (OcrWorker), not in the upload request.

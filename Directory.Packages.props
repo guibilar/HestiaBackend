@@ -37,6 +37,11 @@
     <PackageVersion Include="Ical.Net" Version="5.2.3" />
   </ItemGroup>
 
+  <!-- Email to the Inbox (T102): IMAP and MIME. MIT. -->
+  <ItemGroup Label="Mail">
+    <PackageVersion Include="MailKit" Version="4.18.1" />
+  </ItemGroup>
+
   <!-- Events (D7, T04). Wolverine is MIT-licensed. -->
   <ItemGroup Label="Events">
     <PackageVersion Include="WolverineFx" Version="6.49.0" />

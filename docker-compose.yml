@@ -45,6 +45,13 @@ services:
       Documents__Ocr__Language: ${DOCUMENTS_OCR_LANGUAGE:-eng}
       # T99: the status files of the backup jobs, for the "backups" readiness check and the System alerts on Today.
       Backups__StatusPath: /status
+      # T102: email to the Inbox. A mailbox that only Hestia uses; only the allowed senders count. Off by default.
+      Inbox__Mail__Enabled: ${INBOX_MAIL_ENABLED:-false}
+      Inbox__Mail__Host: ${INBOX_MAIL_HOST:-}
+      Inbox__Mail__Port: ${INBOX_MAIL_PORT:-993}
+      Inbox__Mail__Username: ${INBOX_MAIL_USERNAME:-}
+      Inbox__Mail__Password: ${INBOX_MAIL_PASSWORD:-}
+      Inbox__Mail__AllowedSenders: ${INBOX_MAIL_ALLOWED_SENDERS:-}
     volumes:
       - hestia_documents:/data/documents
       # T99: the status of the Hestia backups (backup.sh writes it), and of the finance backups: set

@@ -7,12 +7,21 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- T102: reads the Inbox mailbox (IMAP). MIT. -->
+    <PackageReference Include="MailKit" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\..\Hestia.Platform\Hestia.Platform.csproj" />
     <ProjectReference Include="..\Hestia.Modules.Inbox.Contracts\Hestia.Modules.Inbox.Contracts.csproj" />
     <!-- The Inbox tile on Today (ITodayCardProvider). -->
     <ProjectReference Include="..\..\Today\Hestia.Modules.Today.Contracts\Hestia.Modules.Today.Contracts.csproj" />
     <!-- The search of the notes (ISearchSource; T17). -->
     <ProjectReference Include="..\..\Search\Hestia.Modules.Search.Contracts\Hestia.Modules.Search.Contracts.csproj" />
+    <!-- T102: the attachments of an email become documents (IDocumentIntake). -->
+    <ProjectReference Include="..\..\Documents\Hestia.Modules.Documents.Contracts\Hestia.Modules.Documents.Contracts.csproj" />
+    <!-- T102: an alert when the mailbox cannot be read (IAlertSource). -->
+    <ProjectReference Include="..\..\Alerts\Hestia.Modules.Alerts.Contracts\Hestia.Modules.Alerts.Contracts.csproj" />
   </ItemGroup>
 
 </Project>

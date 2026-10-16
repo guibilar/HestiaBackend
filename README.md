@@ -840,6 +840,23 @@ before. The module has no events.
 | `POST /{id}/done` | Sorted: `{ "sortedTo": "Task" }` (optional). A note sorted already keeps its first time and place. |
 | `POST /{id}/reopen` | Back with the open notes (an undo). |
 
+**Email to the Inbox (T102).** Hestia can read a mailbox that only it uses (`Inbox:Mail`, off by default). Each new email
+from an allowed sender becomes a note (`source: Email`, `from`): the subject on the first line, then the text (an HTML
+body as text). Each attachment that Documents takes (PDF, photos; also photos in the body) becomes a document with the
+tag `email`, and the note has their ids (`documentIds`); the OCR and the receipt suggestions (T100) run as for an
+upload. Other attachments are named in the note. The same email (Message-ID) never makes two notes. After the read, the
+emails are marked as read and moved to the folder `Hestia`. **Anyone can send to the address**, so only the senders in
+`AllowedSenders` count (an address, or `@domain`); other emails are marked as read and left alone. When the reads fail
+for an hour, the alert `inbox.mail-failing` (Warning) shows on Today.
+
+| `.env` | Setting | Default |
+| --- | --- | --- |
+| `INBOX_MAIL_ENABLED` | `Inbox:Mail:Enabled` | `false` |
+| `INBOX_MAIL_HOST`, `INBOX_MAIL_PORT` | `Host`, `Port` | –, `993` (TLS) |
+| `INBOX_MAIL_USERNAME`, `INBOX_MAIL_PASSWORD` | `Username`, `Password` (Gmail: an app password) | – |
+| `INBOX_MAIL_ALLOWED_SENDERS` | `AllowedSenders`, for example `you@gmail.com, @hydro.example` | – (required when on) |
+| – | `Folder`, `DoneFolder`, `PollInterval`, `AlertAfter` | `INBOX`, `Hestia`, 5 min, 1 h |
+
 **Today.** The tile `inbox.open` (order 150): the count of open notes, "to sort" (Warning from 10 notes). Link `/inbox`.
 **Search.** The open notes are in `GET /api/search` (module `Inbox`, kind `note`, the first line as the title).
 
