@@ -681,6 +681,15 @@ notes, and a reach-out reminder in days (`contactEveryDays`, 1 to 3650). A conta
 notes, a price, an occasion, and `givenOn` (empty: still an idea). A loan has a thing, a direction (`Lent` or
 `Borrowed`), the day of the loan, a due day, and `returnedOn` (empty: open).
 
+**Import (T105).** `POST /api/people/import` takes the text of a vCard file (`vCard`: vCard 2.1 from Android with
+QUOTED-PRINTABLE, 3.0 from iPhone or Google Contacts, or 4.0) or a list of people (`people`, as for `POST /api/people`;
+the Android app reads the phone contacts). It reads the name, the nickname, the first email and phone (the preferred or
+mobile one first), the birthday, the note, and the categories as groups; the other emails and phones, and the company,
+go into the notes. A contact that matches a person (the same email, then the same phone by its last 10 digits, then the
+same name) only fills the empty details of that person and adds its groups: the import never overwrites. `dryRun`
+(default `true`) gives the preview; `only` imports the chosen indexes. Each contact has an action: `Add`, `Merge` (with
+`newFields`), `Same`, or `Skip` (with the reason). At most 2000 contacts.
+
 **Reminder.** With `contactEveryDays`, `contactDueOn` is the last contact (or, without one, the day the person was added)
 plus the reminder; the person is `contactOverdue` after that day. **Birthdays:** February 29 is February 28 in other
 years; `nextBirthday` is today or later.

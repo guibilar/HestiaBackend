@@ -251,3 +251,69 @@ public static class PersonLinkKinds
 
     public static readonly IReadOnlyList<string> All = [DocumentsDocument, MoneyTransaction, TasksTask, HomeItem];
 }
+
+/// <summary>
+/// People to import (<c>POST /api/people/import</c>, T105): the text of a vCard file (<c>.vcf</c>, from a phone or Google
+/// Contacts), or a list of people (the Android app reads the phone contacts). Send one of the two.
+/// </summary>
+/// <param name="VCard">The text of a vCard file (one or more contacts).</param>
+/// <param name="People">People to import, as for <c>POST /api/people</c> (the links are left out).</param>
+/// <param name="DryRun">True (the default): only say what would happen, so the client can show a preview.</param>
+/// <param name="Only">The indexes (from 0, in the file or list order) to import; null: all. The others are skipped.</param>
+public sealed record PeopleImportRequest(
+    string? VCard = null,
+    IReadOnlyList<CreatePersonRequest>? People = null,
+    bool DryRun = true,
+    IReadOnlyList<int>? Only = null);
+
+/// <summary>What an import does with one contact.</summary>
+public enum PeopleImportAction
+{
+    /// <summary>A new person.</summary>
+    Add,
+
+    /// <summary>The same person is there (same email, phone, or name): the import fills only the empty details and adds groups.</summary>
+    Merge,
+
+    /// <summary>The same person is there, and the contact has nothing new.</summary>
+    Same,
+
+    /// <summary>Not imported: not chosen (<c>only</c>), or a value cannot be used (<see cref="PeopleImportItemDto.Reason"/>).</summary>
+    Skip
+}
+
+/// <summary>One contact of an import.</summary>
+/// <param name="Index">The place in the file or list, from 0.</param>
+/// <param name="Person">The contact, as read.</param>
+/// <param name="ExistingId">The person that the contact matches (Merge, Same), or the new person after an import (Add).</param>
+/// <param name="ExistingName">The name of the matching person.</param>
+/// <param name="MatchedBy"><c>email</c>, <c>phone</c>, or <c>name</c>; null for no match.</param>
+/// <param name="NewFields">The details that the import adds to the matching person (Merge), for example <c>birthday</c>.</param>
+public sealed record PeopleImportItemDto(
+    int Index,
+    PeopleImportAction Action,
+    CreatePersonRequest Person,
+    Guid? ExistingId,
+    string? ExistingName,
+    string? MatchedBy,
+    IReadOnlyList<string> NewFields,
+    string? Reason);
+
+/// <summary>The result of an import: the counts, and each contact in order.</summary>
+public sealed record PeopleImportResultDto(
+    bool DryRun,
+    int Added,
+    int Merged,
+    int Unchanged,
+    int Skipped,
+    IReadOnlyList<PeopleImportItemDto> People);
+
+/// <summary>The limits of the import.</summary>
+public static class PeopleImportLimits
+{
+    /// <summary>The most contacts in one import.</summary>
+    public const int MaxContacts = 2000;
+
+    /// <summary>The biggest vCard text (characters). Photos make a file big; they are left out.</summary>
+    public const int MaxVCardLength = 20_000_000;
+}

@@ -48,6 +48,8 @@ public static class PeopleModuleExtensions
         services.AddScoped<PeopleReader>();
         services.AddScoped<PersonLinkTargets>();
         services.AddScoped<PersonService>();
+        // T105: contacts from a vCard file or the phone.
+        services.AddScoped<PeopleImport>();
         services.AddScoped<PeopleRecordService>();
         // Reads only the People tables.
         services.AddScoped<IPeopleQueries, PeopleQueries>();
