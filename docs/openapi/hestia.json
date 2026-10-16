@@ -621,6 +621,39 @@
         }
       }
     },
+    "/api/documents/{id}/suggestions": {
+      "get": {
+        "tags": [
+          "Documents"
+        ],
+        "summary": "What the text of a document says (T100): the store, the day, and the total of a receipt, matching finance transactions, and the end of a warranty.",
+        "description": "Before the OCR is Done, the values are null. Transactions: the same amount, up to 3 days from the day, closest first (at most 5); transactionsComplete is false when finance did not answer.",
+        "operationId": "GetDocumentSuggestions",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentSuggestionsDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/documents/{id}/files/{fileId}": {
       "get": {
         "tags": [
@@ -4693,6 +4726,87 @@
           }
         }
       },
+      "DocumentSuggestionsDto": {
+        "required": [
+          "documentId",
+          "ocrStatus",
+          "merchant",
+          "date",
+          "total",
+          "kind",
+          "warrantyMonths",
+          "warrantyUntil",
+          "transactions",
+          "transactionsComplete"
+        ],
+        "type": "object",
+        "properties": {
+          "documentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "ocrStatus": {
+            "$ref": "#/components/schemas/OcrStatus"
+          },
+          "merchant": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "date": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          },
+          "total": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "kind": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DocumentKind"
+              }
+            ]
+          },
+          "warrantyMonths": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "warrantyUntil": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          },
+          "transactions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TransactionMatchDto"
+            }
+          },
+          "transactionsComplete": {
+            "type": "boolean"
+          }
+        }
+      },
       "DocumentSummaryDto": {
         "required": [
           "id",
@@ -7705,6 +7819,53 @@
           "Date",
           "Text"
         ]
+      },
+      "TransactionMatchDto": {
+        "required": [
+          "id",
+          "date",
+          "description",
+          "amount",
+          "accountName",
+          "daysOff",
+          "linked"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "date": {
+            "type": "string",
+            "format": "date"
+          },
+          "description": {
+            "type": "string"
+          },
+          "amount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "accountName": {
+            "type": "string"
+          },
+          "daysOff": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "linked": {
+            "type": "boolean"
+          }
+        }
       },
       "UpcomingBirthdayDto": {
         "required": [
