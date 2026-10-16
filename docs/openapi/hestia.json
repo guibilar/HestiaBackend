@@ -5100,8 +5100,34 @@
               "null",
               "string"
             ]
+          },
+          "source": {
+            "$ref": "#/components/schemas/InboxSource"
+          },
+          "from": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "documentIds": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
           }
         }
+      },
+      "InboxSource": {
+        "enum": [
+          "Note",
+          "Email"
+        ],
+        "default": "Note"
       },
       "InboxTextRequest": {
         "required": [

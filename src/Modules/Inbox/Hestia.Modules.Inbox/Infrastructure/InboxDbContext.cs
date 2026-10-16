@@ -24,6 +24,13 @@ public class InboxDbContext(DbContextOptions<InboxDbContext> options) : ModuleDb
             item.Property(i => i.SortedTo).HasMaxLength(InboxLimits.MaxSortedToLength);
             // The open notes, newest first.
             item.HasIndex(i => new { i.DoneAt, i.CreatedAt });
+            // T102: email notes.
+            item.Property(i => i.Source).HasConversion<string>().HasMaxLength(20);
+            item.Property(i => i.From).HasMaxLength(InboxLimits.MaxFromLength);
+            item.Property(i => i.MessageId).HasMaxLength(InboxLimits.MaxMessageIdLength);
+            item.Property(i => i.DocumentIds).IsRequired();
+            // The same email never makes two notes.
+            item.HasIndex(i => i.MessageId).IsUnique();
         });
     }
 }

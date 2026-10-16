@@ -117,5 +117,17 @@ public sealed class InboxService(InboxDbContext db, TimeProvider time)
         return value;
     }
 
-    public static InboxItemDto Dto(InboxItem item) => new(item.Id, item.Text, item.CreatedAt, item.UpdatedAt, item.DoneAt, item.SortedTo);
+    public static InboxItemDto Dto(InboxItem item) => new(item.Id, item.Text, item.CreatedAt, item.UpdatedAt, item.DoneAt, item.SortedTo,
+        item.Source, item.From, DocumentIdList.Read(item.DocumentIds));
+}
+
+/// <summary>The documents of an email note, as stored in <see cref="InboxItem.DocumentIds"/>.</summary>
+public static class DocumentIdList
+{
+    public static IReadOnlyList<Guid> Read(string stored) =>
+        stored.Split('|', StringSplitOptions.RemoveEmptyEntries).Select(text => Guid.TryParse(text, out var id) ? id : Guid.Empty)
+            .Where(id => id != Guid.Empty).ToList();
+
+    public static string Write(IReadOnlyCollection<Guid> ids) =>
+        ids.Count == 0 ? string.Empty : "|" + string.Join("|", ids.Select(id => id.ToString("D"))) + "|";
 }

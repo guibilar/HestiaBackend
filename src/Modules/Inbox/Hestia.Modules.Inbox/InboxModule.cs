@@ -1,4 +1,6 @@
+using Hestia.Modules.Alerts.Contracts;
 using Hestia.Modules.Inbox.Application;
+using Hestia.Modules.Inbox.Application.Mail;
 using Hestia.Modules.Inbox.Endpoints;
 using Hestia.Modules.Inbox.Infrastructure;
 using Hestia.Modules.Search.Contracts;
@@ -13,7 +15,8 @@ namespace Hestia.Modules.Inbox;
 
 /// <summary>
 /// The Inbox module (T18): quick notes kept to sort later, a tile on Today, and the notes in the search. The clients
-/// sort a note into another module themselves, then mark it done here. The module has no events.
+/// sort a note into another module themselves, then mark it done here. T102: emails to a mailbox become notes, with
+/// their attachments as documents. The module has no events.
 /// </summary>
 public sealed class InboxModule : IModule
 {
@@ -31,10 +34,21 @@ public static class InboxModuleExtensions
     /// <summary>Registers everything the Inbox module needs, with one call.</summary>
     public static IServiceCollection AddInboxModule(this IServiceCollection services, IConfiguration configuration)
     {
+        services.AddOptions<InboxMailOptions>()
+            .Bind(configuration.GetSection(InboxMailOptions.SectionName))
+            .Validate(options => options.IsValid(), InboxMailOptions.ValidationMessage)
+            .ValidateOnStart();
+
         services.AddModuleDbContext<InboxDbContext>(InboxDbContext.SchemaName);
         services.AddScoped<InboxService>();
         services.AddScoped<ITodayCardProvider, InboxTodayCards>();
         services.AddScoped<ISearchSource, InboxSearch>();
+        // T102: email to the Inbox. The worker does nothing while Inbox:Mail:Enabled is false.
+        services.AddSingleton<IInboxMailbox, ImapInboxMailbox>();
+        services.AddSingleton<InboxMailState>();
+        services.AddScoped<InboxMailReader>();
+        services.AddHostedService<InboxMailWorker>();
+        services.AddScoped<IAlertSource, InboxMailAlerts>();
         return services;
     }
 
