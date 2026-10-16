@@ -92,7 +92,11 @@ public sealed class JournalService(JournalDbContext db, JournalDays days)
         return result;
     }
 
-    private async Task<IReadOnlyList<OnThisDayDto>> OnThisDayAsync(DateOnly today, CancellationToken cancellationToken)
+    private Task<IReadOnlyList<OnThisDayDto>> OnThisDayAsync(DateOnly today, CancellationToken cancellationToken) =>
+        OnThisDayAsync(db, today, cancellationToken);
+
+    /// <summary>The entries of the same day in earlier years, newest first (also for Today, through IJournalQueries).</summary>
+    public static async Task<IReadOnlyList<OnThisDayDto>> OnThisDayAsync(JournalDbContext db, DateOnly today, CancellationToken cancellationToken)
     {
         var same = SameDays(today, OnThisDayYears);
         var entries = await db.Entries.AsNoTracking().Where(e => same.Contains(e.Day)).OrderByDescending(e => e.Day)

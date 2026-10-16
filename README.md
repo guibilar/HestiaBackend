@@ -282,6 +282,11 @@ logic is in one place, here, and not in the web and Android clients.
 - **"Needs attention" items** come from the Alerts module (T15, see [Alerts](#alerts)): Today reads the open alerts of
   all modules (`IAlertQueries`) at the same time as the tiles. The card ids, texts, values, and links did not change
   with T15, so the clients need no change.
+- **"Your day" and "On this day" (T106).** `agenda` has the Calendar items (T103, `ICalendarQueries`) that touch today
+  (whole days first, then by time) and the ones that start in the next 7 days (at most 8); `complete` is false when a
+  module's items did not load, and `agenda` is null when the Calendar did not answer. `memories` has the journal entries
+  of this day in earlier years (`IJournalQueries.OnThisDayAsync`). Both run in their own DI scope: their queries use the
+  DbContexts of the modules that the tile providers use at the same time, and one DbContext cannot run two queries at once.
 - **Finance (Money) comes first** (D11). Its tile provider is in the Today module, because finance is a separate
   service. It reads five finance reports with `IFinanceClient`, as the signed-in user, and never reads the finance
   database. The four tiles: spent this month (against a usual month by now, or against last month so far in January),

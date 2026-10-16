@@ -11,6 +11,9 @@
     <ProjectReference Include="..\Hestia.Modules.Today.Contracts\Hestia.Modules.Today.Contracts.csproj" />
     <!-- The "Needs attention" items of all modules come from the Alerts module (IAlertQueries, T15). -->
     <ProjectReference Include="..\..\Alerts\Hestia.Modules.Alerts.Contracts\Hestia.Modules.Alerts.Contracts.csproj" />
+    <!-- T106: "Your day" from the Calendar (ICalendarQueries), and "On this day" from the Journal (IJournalQueries). -->
+    <ProjectReference Include="..\..\Calendar\Hestia.Modules.Calendar.Contracts\Hestia.Modules.Calendar.Contracts.csproj" />
+    <ProjectReference Include="..\..\Journal\Hestia.Modules.Journal.Contracts\Hestia.Modules.Journal.Contracts.csproj" />
   </ItemGroup>
 
 </Project>

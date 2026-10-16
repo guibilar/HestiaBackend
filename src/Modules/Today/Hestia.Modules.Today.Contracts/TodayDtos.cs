@@ -8,11 +8,67 @@ namespace Hestia.Modules.Today.Contracts;
 /// <param name="GeneratedAt">When the host made this answer. The host keeps it for a short time (<c>Today:CacheDuration</c>).</param>
 /// <param name="Modules">Each module that gives cards, with its status. A failed module gives no cards.</param>
 /// <param name="Cards">The cards: first the tiles, then the "Needs attention" items, each group in module order.</param>
+/// <param name="Agenda">"Your day" (T106): the Calendar items of today and of the next days. Null when the Calendar did
+/// not answer.</param>
+/// <param name="Memories">"On this day" (T106): what happened on this day in earlier years, newest first.</param>
 public sealed record TodayDto(
     DateOnly Date,
     DateTimeOffset GeneratedAt,
     IReadOnlyList<TodayModuleDto> Modules,
-    IReadOnlyList<TodayCard> Cards);
+    IReadOnlyList<TodayCard> Cards,
+    TodayAgendaDto? Agenda = null,
+    IReadOnlyList<TodayMemoryDto>? Memories = null);
+
+/// <summary>
+/// "Your day" on Today (T106): the things of today (events, tasks due, birthdays, …, from the Calendar module, T103), and
+/// the next ones of the coming week.
+/// </summary>
+/// <param name="Today">The items that touch today: the whole-day ones first, then by time.</param>
+/// <param name="Upcoming">The items that start in the next 7 days, soonest first (at most 8).</param>
+/// <param name="Complete">False when a module's items did not load: the lists can miss some.</param>
+public sealed record TodayAgendaDto(IReadOnlyList<TodayAgendaItem> Today, IReadOnlyList<TodayAgendaItem> Upcoming, bool Complete);
+
+/// <summary>
+/// One thing of "Your day": the same fields as a Calendar item (<c>GET /api/calendar</c>). A thing of whole days has
+/// <see cref="AllDay"/>; else <see cref="StartsAt"/> says when.
+/// </summary>
+/// <param name="Id">The Calendar item id.</param>
+/// <param name="Module">The module, for example <c>Calendar</c> or <c>Tasks</c>.</param>
+/// <param name="Kind">What it is: <c>event</c>, <c>task-due</c>, <c>birthday</c>, <c>reach-out</c>, <c>loan-due</c>,
+/// <c>document-expires</c>, <c>warranty-ends</c>.</param>
+/// <param name="Title">One line.</param>
+/// <param name="Text">A second line (the place, "Turns 40"), or null.</param>
+/// <param name="AllDay">True for a thing of whole days.</param>
+/// <param name="StartDate">The first day.</param>
+/// <param name="EndDate">The last day (included).</param>
+/// <param name="StartsAt">The start, for a thing with a time.</param>
+/// <param name="EndsAt">The end, for a thing with a time.</param>
+/// <param name="Link">The web route of the thing; the Android app maps it.</param>
+/// <param name="EventId">For an event of the Calendar module: its id.</param>
+/// <param name="Done">For a task: false while it is open.</param>
+public sealed record TodayAgendaItem(
+    string Id,
+    string Module,
+    string Kind,
+    string Title,
+    string? Text,
+    bool AllDay,
+    DateOnly StartDate,
+    DateOnly EndDate,
+    DateTimeOffset? StartsAt,
+    DateTimeOffset? EndsAt,
+    string? Link,
+    Guid? EventId,
+    bool? Done);
+
+/// <summary>Something from this day in an earlier year ("On this day", T106), for example a journal entry.</summary>
+/// <param name="Module">The module, for example <c>Journal</c>.</param>
+/// <param name="Kind">What it is, for example <c>journal-entry</c>.</param>
+/// <param name="YearsAgo">How many years ago (1 or more).</param>
+/// <param name="Day">The day.</param>
+/// <param name="Text">The start of its text (at most 200 characters).</param>
+/// <param name="Link">The web route of the thing.</param>
+public sealed record TodayMemoryDto(string Module, string Kind, int YearsAgo, DateOnly Day, string Text, string? Link);
 
 /// <summary>One module on Today, and whether all its cards are there.</summary>
 public sealed record TodayModuleDto(string Module, TodayModuleStatus Status);

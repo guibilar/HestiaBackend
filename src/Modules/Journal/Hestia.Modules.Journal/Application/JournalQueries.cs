@@ -15,4 +15,7 @@ public sealed class JournalQueries(JournalDbContext db) : IJournalQueries
     public async Task<IReadOnlyList<JournalEntrySummaryDto>> ListAsync(DateOnly from, DateOnly to, CancellationToken cancellationToken) =>
         (await db.Entries.AsNoTracking().Where(e => e.Day >= from && e.Day <= to).OrderByDescending(e => e.Day)
             .ToListAsync(cancellationToken)).Select(JournalService.Summary).ToList();
+
+    public Task<IReadOnlyList<OnThisDayDto>> OnThisDayAsync(DateOnly today, CancellationToken cancellationToken) =>
+        JournalService.OnThisDayAsync(db, today, cancellationToken);
 }
