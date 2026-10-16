@@ -40,6 +40,8 @@
   <!-- Email to the Inbox (T102): IMAP and MIME. MIT. -->
   <ItemGroup Label="Mail">
     <PackageVersion Include="MailKit" Version="4.18.1" />
+    <!-- MimeKit (in MailKit) asks for 10.0.0, which has a known vulnerability (GHSA-846f-f764-76mx): the patched one. -->
+    <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
   </ItemGroup>
 
   <!-- Events (D7, T04). Wolverine is MIT-licensed. -->

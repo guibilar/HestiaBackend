@@ -9,6 +9,8 @@
   <ItemGroup>
     <!-- T102: reads the Inbox mailbox (IMAP). MIT. -->
     <PackageReference Include="MailKit" />
+    <!-- The patched version of a package that MimeKit brings (see Directory.Packages.props). -->
+    <PackageReference Include="System.Security.Cryptography.Pkcs" />
   </ItemGroup>
 
   <ItemGroup>
