@@ -53,7 +53,7 @@ public sealed class TodayService(
         await Task.WhenAll(fromProviders, fromAlerts, agenda, memories);
 
         // One entry per module: its provider and its alerts together.
-        var modules = fromProviders.Result.Concat(fromAlerts.Result)
+        var modules = fromProviders.Result.Concat(fromAlerts.Result ?? [])
             .GroupBy(part => part.Module, StringComparer.Ordinal)
             .Select(group => new ModuleResult(group.Key, group.Min(part => part.Order), Status(group.ToList()),
                 group.SelectMany(part => part.Cards).ToList()))
@@ -67,8 +67,9 @@ public sealed class TodayService(
         var answer = new TodayDto(date, now, modules.Select(m => new TodayModuleDto(m.Module, m.Status)).ToList(), cards,
             agenda.Result, memories.Result);
 
-        // Keep only a complete answer: after a failure, the next request tries again.
-        if (modules.All(m => m.Status == TodayModuleStatus.Complete) && _options.CacheDuration > TimeSpan.Zero)
+        // Keep only a complete answer: after a failure (the alerts too), the next request tries again.
+        if (fromAlerts.Result is not null && modules.All(m => m.Status == TodayModuleStatus.Complete) &&
+            _options.CacheDuration > TimeSpan.Zero)
         {
             cache.Set(key, answer, _options.CacheDuration);
         }
@@ -198,9 +199,9 @@ public sealed class TodayService(
 
     /// <summary>
     /// The alerts of each module, as "Needs attention" cards, in the order of each module's rules (T15). With
-    /// <paramref name="refresh"/> (pull to refresh), the Alerts module checks the rules first.
+    /// <paramref name="refresh"/> (pull to refresh), the Alerts module checks the rules first. Null when they did not load.
     /// </summary>
-    private async Task<IReadOnlyList<PartResult>> RunAlertsAsync(bool refresh, CancellationToken requestAborted)
+    private async Task<IReadOnlyList<PartResult>?> RunAlertsAsync(bool refresh, CancellationToken requestAborted)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(requestAborted);
         timeout.CancelAfter(_options.ProviderTimeout);
@@ -219,7 +220,7 @@ public sealed class TodayService(
         catch (Exception exception)
         {
             logger.LogError(exception, "Today: the alerts did not load");
-            return [];
+            return null;
         }
     }
 }
