@@ -2,6 +2,7 @@ using System.Net;
 using Hestia.Modules.Documents.Application;
 using Hestia.Modules.Documents.Application.Ocr;
 using Hestia.Modules.Documents.Contracts;
+using Hestia.Modules.Documents.Domain;
 using Hestia.Platform.Paging;
 using Hestia.Testing;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -47,6 +48,19 @@ public class OcrTests
         Assert.Equal(OcrStatus.Failed, document.OcrStatus);
         Assert.Equal("scanned-warranty.pdf: The PDF is encrypted.", document.OcrError);
         Assert.Equal("Text layer of the PDF\n\nKETTLE 49.99", document.OcrText);
+    }
+
+    [Fact]
+    public async Task ALongText_IsCut_WithoutSplittingAnEmoji()
+    {
+        await using var host = DocumentsHost.Start();
+        var start = new string('x', Document.MaxOcrTextLength - 1);
+        host.Ocr.Respond = (_, _) => OcrResult.Succeeded(start + "🙂 and more");
+
+        var created = await host.UploadOkAsync(files: [SampleFile.Pdf]);
+        var document = await host.WaitForOcrAsync(created.Id);
+
+        Assert.Equal((OcrStatus.Done, start), (document.OcrStatus, document.OcrText));
     }
 
     [Fact]

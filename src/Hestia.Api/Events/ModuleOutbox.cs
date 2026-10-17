@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Hestia.Platform.Events;
 using Hestia.Platform.Persistence;
+using Hestia.Platform.Text;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -199,7 +200,7 @@ internal sealed class ModuleOutboxSender(
     {
         message.Attempts++;
         var error = ex.GetBaseException().Message;
-        message.LastError = error.Length > OutboxMessage.MaxErrorLength ? error[..OutboxMessage.MaxErrorLength] : error;
+        message.LastError = TextCut.Start(error, OutboxMessage.MaxErrorLength);
         message.NextAttemptAt = time.GetUtcNow() + RetryDelay(settings.RetryDelay, message.Attempts);
 
         if (message.Attempts >= settings.MaxAttempts)
