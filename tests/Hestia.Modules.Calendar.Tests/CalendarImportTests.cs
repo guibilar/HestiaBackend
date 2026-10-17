@@ -110,6 +110,22 @@ public class CalendarImportTests
     }
 
     [Fact]
+    public async Task ACancelledRepeatedEvent_IsDeleted_WithItsChangedOccurrences()
+    {
+        await using var host = CalendarHost.Start();
+        var moved = Event("yoga@example.com",
+            "RECURRENCE-ID;TZID=America/Denver:20261103T180000\r\nSUMMARY:Yoga (outdoor)\r\n" +
+            "DTSTART;TZID=America/Denver:20261103T170000\r\nDTEND;TZID=America/Denver:20261103T180000\r\n");
+        await host.ImportAsync(Ics(Yoga, moved));
+
+        var cancel = await host.ImportAsync(Ics(Yoga.Replace("SUMMARY:", "STATUS:CANCELLED\r\nSUMMARY:")));
+
+        Assert.Equal(CalendarImportAction.Delete, Assert.Single(cancel.Events).Action);
+        var items = (await host.ViewAsync(CalendarHost.Today, CalendarHost.Today.AddDays(30))).Items;
+        Assert.DoesNotContain(items, i => i.Title.StartsWith("Yoga", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task ACancelledOccurrence_IsSkippedByTheRepeat()
     {
         await using var host = CalendarHost.Start();

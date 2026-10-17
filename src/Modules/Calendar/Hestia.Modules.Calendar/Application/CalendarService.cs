@@ -136,6 +136,15 @@ public sealed class CalendarService(CalendarDbContext db, CalendarDays days)
             {
                 db.Events.Remove(current);
                 byKey.Remove(key);
+                // A cancelled repeated event: its changed occurrences go with it.
+                if (item.RecurrenceId is null)
+                {
+                    foreach (var (otherKey, occurrence) in byKey.Where(pair => pair.Value.Uid == item.Uid).ToList())
+                    {
+                        db.Events.Remove(occurrence);
+                        byKey.Remove(otherKey);
+                    }
+                }
             }
             return Result(CalendarImportAction.Delete, current.Id);
         }
