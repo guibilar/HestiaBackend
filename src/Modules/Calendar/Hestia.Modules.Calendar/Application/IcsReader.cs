@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Hestia.Modules.Calendar.Contracts;
 using Hestia.Platform.Exceptions;
+using Hestia.Platform.Text;
 using Ical.Net.DataTypes;
 
 namespace Hestia.Modules.Calendar.Application;
@@ -212,5 +213,5 @@ public static class IcsReader
         return string.IsNullOrEmpty(value) ? null : value;
     }
 
-    private static string? Cut(string? text, int max) => text is null ? null : text.Length <= max ? text : text[..max];
+    private static string? Cut(string? text, int max) => text is null ? null : TextCut.Start(text, max);
 }

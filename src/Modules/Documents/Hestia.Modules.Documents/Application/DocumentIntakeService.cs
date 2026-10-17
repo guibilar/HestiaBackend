@@ -17,4 +17,7 @@ public sealed class DocumentIntakeService(DocumentService documents) : IDocument
             .ToList();
         return documents.UploadAsync(new DocumentUpload(intake.Title, null, intake.Tags, null, null, intake.Notes, files), cancellationToken);
     }
+
+    public Task RemoveAsync(Guid documentId, CancellationToken cancellationToken = default) =>
+        documents.DeleteAsync(documentId, cancellationToken);
 }

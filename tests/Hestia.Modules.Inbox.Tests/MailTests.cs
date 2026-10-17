@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Hestia.Modules.Alerts.Contracts;
+using Hestia.Modules.Documents.Application;
 using Hestia.Modules.Documents.Contracts;
 using Hestia.Modules.Inbox.Application.Mail;
 using Hestia.Modules.Inbox.Contracts;
@@ -46,6 +47,25 @@ public sealed class MailTests : IDisposable
     {
         public Task<DocumentDto> AddAsync(DocumentIntake intake, CancellationToken cancellationToken = default) =>
             throw new IOException("No space left on device.");
+
+        public Task RemoveAsync(Guid documentId, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    }
+
+    /// <summary>The real Documents, but a file named "bad.png" fails while <see cref="Fail"/> is set.</summary>
+    private sealed class FlakyIntake(IDocumentIntake inner, FlakyIntake.Switch state) : IDocumentIntake
+    {
+        public sealed class Switch
+        {
+            public bool Fail { get; set; } = true;
+        }
+
+        public Task<DocumentDto> AddAsync(DocumentIntake intake, CancellationToken cancellationToken = default) =>
+            state.Fail && intake.Files.Any(f => f.FileName == "bad.png")
+                ? throw new IOException("No space left on device.")
+                : inner.AddAsync(intake, cancellationToken);
+
+        public Task RemoveAsync(Guid documentId, CancellationToken cancellationToken = default) =>
+            inner.RemoveAsync(documentId, cancellationToken);
     }
 
     private HestiaApiFactory Host(FakeMailbox mailbox, Action<IServiceCollection>? services = null) => new(
@@ -132,6 +152,29 @@ public sealed class MailTests : IDisposable
     }
 
     [Fact]
+    public async Task AnEmailThatFails_LeavesNoDocuments_SoTheNextReadDoesNotAddThemTwice()
+    {
+        var mailbox = new FakeMailbox();
+        mailbox.New.Add(new InboxMail("1", "<two@example.com>", "me@example.com", "me@example.com", "Bills", null,
+            [new InboxMailAttachment("good.png", Png), new InboxMailAttachment("bad.png", Png)]));
+        var state = new FlakyIntake.Switch();
+        await using var factory = Host(mailbox, services =>
+        {
+            services.AddSingleton(state);
+            services.RemoveAll<IDocumentIntake>();
+            services.AddScoped<IDocumentIntake>(provider => new FlakyIntake(
+                new DocumentIntakeService(provider.GetRequiredService<DocumentService>()), state));
+        });
+
+        await Assert.ThrowsAsync<IOException>(() => ReadAsync(factory));
+        state.Fail = false;
+        Assert.Equal(2, (await ReadAsync(factory)).Documents);
+
+        var documents = await (await factory.CreateClient().GetAsync("/api/documents")).ReadAsync<PaginatedList<DocumentSummaryDto>>();
+        Assert.Equal(2, documents.TotalCount);
+    }
+
+    [Fact]
     public async Task AnEmailWithNulCharacters_BecomesANoteWithoutThem()
     {
         // PostgreSQL refuses NUL in text: the save failed, and the email failed again at each read.
@@ -170,6 +213,23 @@ public sealed class MailTests : IDisposable
         Assert.StartsWith("Email from me@example.com\n\nxxx", text);
         Assert.Equal(InboxLimits.MaxTextLength, text.Length);
         Assert.EndsWith("…", text);
+    }
+
+    [Fact]
+    public async Task ACut_DoesNotSplitAnEmoji()
+    {
+        // Half of an emoji is not valid text: PostgreSQL refuses it.
+        var from = new string('x', InboxLimits.MaxFromLength - 1) + "😀";
+        var mailbox = new FakeMailbox();
+        mailbox.New.Add(new InboxMail("1", null, "me@example.com", from, null, new string('x', InboxLimits.MaxTextLength) + "😀", []));
+        await using var factory = Host(mailbox);
+
+        Assert.Equal(1, (await ReadAsync(factory)).Notes);
+        var note = Assert.Single((await (await factory.CreateClient().GetAsync("/api/inbox")).ReadAsync<PaginatedList<InboxItemDto>>()).Items);
+        Assert.Equal(new string('x', InboxLimits.MaxFromLength - 1), note.From);
+        var subject = new string('x', InboxLimits.MaxTextLength - 2) + "😀";
+        var text = InboxMailReader.NoteText(new InboxMail("2", null, "me@example.com", "me@example.com", subject, "More", []), []);
+        Assert.Equal(new string('x', InboxLimits.MaxTextLength - 2) + "…", text);
     }
 
     [Fact]

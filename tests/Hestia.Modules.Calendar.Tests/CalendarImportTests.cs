@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using Hestia.Modules.Calendar.Application;
 using Hestia.Modules.Calendar.Contracts;
 using Hestia.Testing;
 
@@ -121,5 +122,17 @@ public class CalendarImportTests
         var bad = await host.Client.PostAsJsonAsync($"{CalendarHost.Calendar}/import", new CalendarImportRequest("hello"), HestiaApiFactory.Json);
         Assert.Equal(HttpStatusCode.BadRequest, bad.StatusCode);
         Assert.Contains("ics", await bad.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public void ALongTitle_IsNotCutInsideAnEmoji()
+    {
+        // Half of an emoji is not valid text: PostgreSQL refuses it.
+        var title = new string('x', CalendarLimits.MaxTitleLength - 1) + "😀";
+        var ics = Ics(Event("emoji@example.com", $"SUMMARY:{title}\r\nDTSTART:20261020T090000Z\r\n"));
+
+        var e = Assert.Single(IcsReader.Read(ics, TimeZoneInfo.Utc));
+
+        Assert.Equal(new string('x', CalendarLimits.MaxTitleLength - 1), e.Title);
     }
 }

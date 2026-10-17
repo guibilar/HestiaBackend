@@ -11,6 +11,10 @@ public interface IDocumentIntake
     /// <exception cref="Hestia.Platform.Exceptions.InvalidInputException">A file type that Documents does not take, or a file
     /// that is too big.</exception>
     Task<DocumentDto> AddAsync(DocumentIntake intake, CancellationToken cancellationToken = default);
+
+    /// <summary>Removes a document that <see cref="AddAsync"/> added, when the work it was for failed (the note of the email).</summary>
+    /// <exception cref="Hestia.Platform.Exceptions.NotFoundException">No such document.</exception>
+    Task RemoveAsync(Guid documentId, CancellationToken cancellationToken = default);
 }
 
 /// <summary>A document to add from files.</summary>
