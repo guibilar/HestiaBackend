@@ -4,6 +4,7 @@ using Hestia.Modules.Identity.Domain;
 using Hestia.Modules.Identity.Infrastructure;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -21,6 +22,9 @@ public class DbTicketStore(IServiceScopeFactory scopes, TimeProvider timeProvide
     /// the ticket stored here, so the store adds the key when it gives a ticket back.
     /// </summary>
     internal const string SessionKeyClaim = "hestia:session";
+
+    /// <summary>Where a sign-in request keeps the key of the session it came with (see <see cref="StartsNewSession"/>).</summary>
+    private const string PreviousSessionItem = "hestia:previous-session";
 
     public async Task<string> StoreAsync(AuthenticationTicket ticket)
     {
@@ -55,9 +59,45 @@ public class DbTicketStore(IServiceScopeFactory scopes, TimeProvider timeProvide
             return;
         }
 
+        // A session belongs to one user for good. The cookie handler renews the session of the request when it signs
+        // in; if that is another user, the session ends rather than changing hands (a copy of its cookie would then be
+        // signed in as that user). The sign-in endpoint does not get here (StartsNewSession).
+        if (ticket.Principal.FindFirstValue(ClaimTypes.NameIdentifier) != session.UserId)
+        {
+            db.UserSessions.Remove(session);
+            await db.SaveChangesAsync();
+            return;
+        }
+
         session.Ticket = TicketSerializer.Default.Serialize(ticket);
         session.ExpiresUtc = ticket.Properties.ExpiresUtc;
         await db.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// The cookie handler reads the session of the request (and keeps its key) before an endpoint runs. On a sign-in
+    /// endpoint (<see cref="StartsNewSession"/>), the request is not in its session: else the sign-in would renew that
+    /// session and keep its key, and a copy of the earlier cookie would be signed in as whoever signs in now (session
+    /// fixation). The sign-in stores a new session with a new key, and <see cref="EndPreviousSessionAsync"/> ends the
+    /// earlier one.
+    /// </summary>
+    public Task<AuthenticationTicket?> RetrieveAsync(string key, HttpContext httpContext, CancellationToken cancellationToken)
+    {
+        if (httpContext.GetEndpoint()?.Metadata.GetMetadata<StartsNewSession>() is not null)
+        {
+            httpContext.Items[PreviousSessionItem] = key;
+            return Task.FromResult<AuthenticationTicket?>(null);
+        }
+        return RetrieveAsync(key);
+    }
+
+    /// <summary>After a sign-in on a <see cref="StartsNewSession"/> endpoint: ends the session the request came with.</summary>
+    public async Task EndPreviousSessionAsync(HttpContext httpContext)
+    {
+        if (httpContext.Items[PreviousSessionItem] is string key)
+        {
+            await RemoveAsync(key);
+        }
     }
 
     public async Task<AuthenticationTicket?> RetrieveAsync(string key)
@@ -111,4 +151,16 @@ public class DbTicketStore(IServiceScopeFactory scopes, TimeProvider timeProvide
     private static string UserId(ClaimsPrincipal principal) =>
         principal.FindFirstValue(ClaimTypes.NameIdentifier)
         ?? throw new InvalidOperationException("A sign-in without a user id cannot be stored.");
+}
+
+/// <summary>
+/// Endpoint metadata for the sign-in endpoint: a sign-in always starts a new session (<see cref="DbTicketStore"/>).
+/// </summary>
+internal sealed class StartsNewSession
+{
+    public static readonly StartsNewSession Instance = new();
+
+    private StartsNewSession()
+    {
+    }
 }

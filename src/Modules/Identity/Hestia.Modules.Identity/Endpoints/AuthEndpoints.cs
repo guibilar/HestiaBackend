@@ -22,9 +22,10 @@ public static class AuthEndpoints
     {
         var auth = endpoints.MapGroup(Prefix);
 
-        // Signs in and sets the session cookie.
+        // Signs in and sets the cookie of a new session; a session that the request came with ends.
         auth.MapPost("/login", LoginAsync)
             .AllowAnonymous()
+            .WithMetadata(StartsNewSession.Instance)
             .RequireRateLimiting(SignInGuard.PolicyName);
 
         // Ends the session (on the server too: a copy of the cookie stops working). No error when already signed out.
@@ -47,7 +48,8 @@ public static class AuthEndpoints
     }
 
     private static async Task<IResult> LoginAsync(
-        LoginRequest login, UserManager<IdentityUser> users, SignInManager<IdentityUser> signIn, UnknownUsernames unknownUsernames)
+        LoginRequest login, UserManager<IdentityUser> users, SignInManager<IdentityUser> signIn, UnknownUsernames unknownUsernames,
+        DbTicketStore sessions, HttpContext context)
     {
         if (string.IsNullOrEmpty(login.Username) || string.IsNullOrEmpty(login.Password))
         {
@@ -63,9 +65,12 @@ public static class AuthEndpoints
             return unknownUsernames.Fail(users, login.Username, login.Password) ? LockedOut() : SignInFailed();
         }
         var result = await signIn.PasswordSignInAsync(user, login.Password, login.RememberMe, lockoutOnFailure: true);
-        // User names match without case; answer with the stored spelling.
         if (result.Succeeded)
         {
+            // The session that the request came with (another user, or this one earlier) ends: its cookie stops working.
+            // A failed sign-in leaves it as it was.
+            await sessions.EndPreviousSessionAsync(context);
+            // User names match without case; answer with the stored spelling.
             // A password sign-in (the cookie) always has the full scope.
             return Results.Ok(new CurrentUserDto(user.UserName!, HestiaUser.FullScope));
         }
