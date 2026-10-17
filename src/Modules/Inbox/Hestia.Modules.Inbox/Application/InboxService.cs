@@ -13,16 +13,11 @@ namespace Hestia.Modules.Inbox.Application;
 /// </summary>
 public sealed class InboxService(InboxDbContext db, TimeProvider time)
 {
-    public const int MaxPageSize = 100;
-
     /// <summary>The open notes, newest first; with <paramref name="done"/>, the sorted ones, last sorted first.</summary>
     public async Task<PaginatedList<InboxItemDto>> ListAsync(bool done, string? text, int page, int pageSize,
         CancellationToken cancellationToken)
     {
-        if (page < 1 || pageSize is < 1 or > MaxPageSize)
-        {
-            throw new InvalidInputException("pageSize", $"page must be 1 or more, and pageSize from 1 to {MaxPageSize}.");
-        }
+        PagingExtensions.Validate(page, pageSize);
         var items = db.Items.AsNoTracking().Where(i => (i.DoneAt != null) == done);
         foreach (var word in (text ?? string.Empty).Trim().ToLowerInvariant().Split(' ', StringSplitOptions.RemoveEmptyEntries))
         {

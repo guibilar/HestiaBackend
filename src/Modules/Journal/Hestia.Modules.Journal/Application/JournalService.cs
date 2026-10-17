@@ -15,8 +15,6 @@ public sealed record JournalQuery(string? Text, DateOnly? From, DateOnly? To, in
 /// <summary>The journal: one entry per day, the streak, and "On this day" (T21).</summary>
 public sealed class JournalService(JournalDbContext db, JournalDays days)
 {
-    public const int MaxPageSize = 100;
-
     /// <summary>How far back "On this day" looks.</summary>
     public const int OnThisDayYears = 30;
 
@@ -106,10 +104,7 @@ public sealed class JournalService(JournalDbContext db, JournalDays days)
 
     public async Task<PaginatedList<JournalEntrySummaryDto>> ListAsync(JournalQuery query, CancellationToken cancellationToken)
     {
-        if (query.Page < 1 || query.PageSize is < 1 or > MaxPageSize)
-        {
-            throw new InvalidInputException("pageSize", $"page must be 1 or more, and pageSize from 1 to {MaxPageSize}.");
-        }
+        PagingExtensions.Validate(query.Page, query.PageSize);
         if (query.From is { } start && query.To is { } end && end < start)
         {
             throw new InvalidInputException("to", "to must be on or after from.");

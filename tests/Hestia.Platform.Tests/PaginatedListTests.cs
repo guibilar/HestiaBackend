@@ -24,6 +24,9 @@ public class PaginatedListTests
     [InlineData(0, 10, "page")]
     [InlineData(1, 0, "pageSize")]
     [InlineData(1, PagingExtensions.MaxPageSize + 1, "pageSize")]
+    // (page - 1) * pageSize does not fit an int: it overflowed to a negative skip.
+    [InlineData(int.MaxValue, 2, "page")]
+    [InlineData(21_474_838, PagingExtensions.MaxPageSize, "page")]
     public void Validate_RejectsAPageOutOfRange(int page, int pageSize, string field)
     {
         var exception = Assert.Throws<InvalidInputException>(() => PagingExtensions.Validate(page, pageSize));
@@ -36,5 +39,7 @@ public class PaginatedListTests
     {
         PagingExtensions.Validate(1, 1);
         PagingExtensions.Validate(1, PagingExtensions.MaxPageSize);
+        PagingExtensions.Validate(int.MaxValue, 1);
+        PagingExtensions.Validate(21_474_837, PagingExtensions.MaxPageSize);
     }
 }

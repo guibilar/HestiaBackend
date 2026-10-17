@@ -3,6 +3,7 @@ using Hestia.Modules.Inbox.Contracts;
 using Hestia.Modules.Inbox.Domain;
 using Hestia.Modules.Inbox.Infrastructure;
 using Hestia.Platform.Exceptions;
+using Hestia.Platform.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -34,66 +35,92 @@ public sealed class InboxMailReader(
         var mails = await mailbox.ReadNewAsync(BatchSize, cancellationToken);
         int notes = 0, documentCount = 0, ignored = 0, duplicates = 0;
         var done = new List<string>();
-        foreach (var mail in mails)
+        try
         {
-            if (!settings.Allows(mail.FromAddress))
-            {
-                logger.LogWarning("Inbox: an email from {Sender} is not from an allowed sender; it is left alone", mail.FromAddress);
-                ignored++;
-                done.Add(mail.Uid);
-                continue;
-            }
-            var messageId = Cut(mail.MessageId, InboxLimits.MaxMessageIdLength);
-            if (messageId is not null && await db.Items.AnyAsync(i => i.MessageId == messageId, cancellationToken))
-            {
-                duplicates++;
-                done.Add(mail.Uid);
-                continue;
-            }
-
-            var ids = new List<Guid>();
-            var refused = new List<string>();
-            foreach (var attachment in mail.Attachments.Where(a => a.Content.Length > 0))
-            {
-                try
-                {
-                    var document = await documents.AddAsync(new DocumentIntake(null, ["email"],
-                        $"From the email \"{mail.Subject}\" ({mail.From}).", [new DocumentIntakeFile(attachment.FileName, attachment.Content)]),
-                        cancellationToken);
-                    ids.Add(document.Id);
-                }
-                catch (InvalidInputException exception)
-                {
-                    // For example a .docx or a calendar invitation: the note says so.
-                    refused.Add($"{attachment.FileName} ({exception.Message})");
-                }
-            }
-
-            var now = time.GetUtcNow();
-            db.Items.Add(new InboxItem
-            {
-                Id = Guid.CreateVersion7(),
-                Text = NoteText(mail, refused),
-                CreatedAt = now,
-                UpdatedAt = now,
-                Source = InboxSource.Email,
-                From = Cut(mail.From, InboxLimits.MaxFromLength),
-                MessageId = messageId,
-                DocumentIds = DocumentIdList.Write(ids)
-            });
-            await db.SaveChangesAsync(cancellationToken);
-            notes++;
-            documentCount += ids.Count;
-            done.Add(mail.Uid);
+            await ReadAllAsync();
         }
-        await mailbox.DoneAsync(done, cancellationToken);
+        finally
+        {
+            // Also after an email that failed: the ones before it are notes now, and an email without a Message-ID would
+            // make its note again at each read.
+            await mailbox.DoneAsync(done, cancellationToken);
+        }
         if (mails.Count > 0)
         {
             logger.LogInformation("Inbox: read {Mails} emails: {Notes} notes, {Documents} documents, {Ignored} not allowed, {Duplicates} already there",
                 mails.Count, notes, documentCount, ignored, duplicates);
         }
         return new InboxMailResult(notes, documentCount, ignored, duplicates);
+
+        async Task ReadAllAsync()
+        {
+            foreach (var received in mails)
+            {
+                // No NUL characters: PostgreSQL refuses them, and the email would fail at each read.
+                var mail = WithoutNul(received);
+                if (!settings.Allows(mail.FromAddress))
+                {
+                    logger.LogWarning("Inbox: an email from {Sender} is not from an allowed sender; it is left alone", mail.FromAddress);
+                    ignored++;
+                    done.Add(mail.Uid);
+                    continue;
+                }
+                var messageId = Cut(mail.MessageId, InboxLimits.MaxMessageIdLength);
+                if (messageId is not null && await db.Items.AnyAsync(i => i.MessageId == messageId, cancellationToken))
+                {
+                    duplicates++;
+                    done.Add(mail.Uid);
+                    continue;
+                }
+
+                var ids = new List<Guid>();
+                var refused = new List<string>();
+                foreach (var attachment in mail.Attachments.Where(a => a.Content.Length > 0))
+                {
+                    try
+                    {
+                        var document = await documents.AddAsync(new DocumentIntake(null, ["email"],
+                            $"From the email \"{mail.Subject}\" ({mail.From}).", [new DocumentIntakeFile(attachment.FileName, attachment.Content)]),
+                            cancellationToken);
+                        ids.Add(document.Id);
+                    }
+                    catch (InvalidInputException exception)
+                    {
+                        // For example a .docx or a calendar invitation: the note says so.
+                        refused.Add($"{attachment.FileName} ({exception.Message})");
+                    }
+                }
+
+                var now = time.GetUtcNow();
+                db.Items.Add(new InboxItem
+                {
+                    Id = Guid.CreateVersion7(),
+                    Text = NoteText(mail, refused),
+                    CreatedAt = now,
+                    UpdatedAt = now,
+                    Source = InboxSource.Email,
+                    From = Cut(mail.From, InboxLimits.MaxFromLength),
+                    MessageId = messageId,
+                    DocumentIds = DocumentIdList.Write(ids)
+                });
+                await db.SaveChangesAsync(cancellationToken);
+                notes++;
+                documentCount += ids.Count;
+                done.Add(mail.Uid);
+            }
+        }
     }
+
+    /// <summary>The email without NUL characters in its texts and file names.</summary>
+    public static InboxMail WithoutNul(InboxMail mail) => mail with
+    {
+        MessageId = NulCharacters.Remove(mail.MessageId),
+        FromAddress = NulCharacters.Remove(mail.FromAddress)!,
+        From = NulCharacters.Remove(mail.From)!,
+        Subject = NulCharacters.Remove(mail.Subject),
+        Text = NulCharacters.Remove(mail.Text),
+        Attachments = mail.Attachments.Select(a => a with { FileName = NulCharacters.Remove(a.FileName)! }).ToList()
+    };
 
     /// <summary>The subject on the first line, then the text, at most the length of a note.</summary>
     public static string NoteText(InboxMail mail, IReadOnlyList<string> refused)
@@ -114,5 +141,5 @@ public sealed class InboxMailReader(
     }
 
     private static string? Cut(string? text, int max) =>
-        string.IsNullOrWhiteSpace(text) ? null : text.Length <= max ? text.Trim() : text.Trim()[..max];
+        string.IsNullOrWhiteSpace(text) ? null : text.Trim() is var trimmed && trimmed.Length > max ? trimmed[..max] : trimmed;
 }
