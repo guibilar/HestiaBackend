@@ -69,4 +69,14 @@ public class RuleTests
         Assert.Equal(DocumentFile.MaxFileNameLength, name.Length);
         Assert.EndsWith("x.pdf", name);
     }
+
+    [Fact]
+    public void ALongFileName_IsNotCutInsideAnEmoji()
+    {
+        // The cut falls between the two halves of the emoji: half of one is not valid text.
+        var cut = DocumentFile.MaxFileNameLength - ".pdf".Length;
+        var name = DocumentService.CleanFileName(new string('x', cut - 1) + "😀 more.pdf", FileTypes.Pdf);
+
+        Assert.Equal(new string('x', cut - 1) + ".pdf", name);
+    }
 }

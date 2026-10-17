@@ -5,6 +5,7 @@ using Hestia.Modules.Documents.Domain;
 using Hestia.Modules.Documents.Infrastructure;
 using Hestia.Platform.Exceptions;
 using Hestia.Platform.Paging;
+using Hestia.Platform.Text;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -181,7 +182,7 @@ public sealed class DocumentService(
         {
             var extension = Path.GetExtension(clean);
             extension = extension.Length > 20 ? string.Empty : extension;
-            clean = clean[..(DocumentFile.MaxFileNameLength - extension.Length)] + extension;
+            clean = TextCut.Start(clean, DocumentFile.MaxFileNameLength - extension.Length) + extension;
         }
         return clean;
     }

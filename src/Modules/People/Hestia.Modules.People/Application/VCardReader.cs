@@ -137,6 +137,18 @@ public static class VCardReader
 
     private static string QuotedPrintable(string value, string charset)
     {
+        Encoding encoding;
+        try
+        {
+            encoding = Encoding.GetEncoding(charset);
+        }
+        catch (ArgumentException)
+        {
+            encoding = Encoding.UTF8;
+        }
+        // The =XX bytes are in the charset; a character that is not encoded is text already (the file was read as text),
+        // so it is kept as it is, not read again in the charset.
+        var result = new StringBuilder(value.Length);
         var bytes = new List<byte>();
         for (var i = 0; i < value.Length; i++)
         {
@@ -148,19 +160,11 @@ public static class VCardReader
             }
             else
             {
-                bytes.AddRange(Encoding.UTF8.GetBytes(value[i].ToString()));
+                result.Append(encoding.GetString(bytes.ToArray())).Append(value[i]);
+                bytes.Clear();
             }
         }
-        Encoding encoding;
-        try
-        {
-            encoding = Encoding.GetEncoding(charset);
-        }
-        catch (ArgumentException)
-        {
-            encoding = Encoding.UTF8;
-        }
-        return encoding.GetString(bytes.ToArray());
+        return result.Append(encoding.GetString(bytes.ToArray())).ToString();
     }
 
     /// <summary>A text value: the escapes <c>\n</c>, <c>\,</c>, <c>\;</c>, and <c>\\</c> become their characters.</summary>

@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
@@ -19,6 +20,7 @@ public class ApiExceptionHandlerTests
     [Theory]
     [InlineData("/not-found", HttpStatusCode.NotFound, "Not found")]
     [InlineData("/conflict", HttpStatusCode.Conflict, "Conflict")]
+    [InlineData("/changed", HttpStatusCode.Conflict, "Conflict")]
     [InlineData("/invalid", HttpStatusCode.BadRequest, null)]
     [InlineData("/bad-request", HttpStatusCode.BadRequest, "Bad Request")]
     [InlineData("/too-large", HttpStatusCode.RequestEntityTooLarge, "Payload Too Large")]
@@ -137,6 +139,7 @@ public class ApiExceptionHandlerTests
     {
         "/not-found" => new NotFoundException("Item", Guid.Empty),
         "/conflict" => new ConflictException("It exists already."),
+        "/changed" => new DbUpdateConcurrencyException("The row changed."),
         "/invalid" => new InvalidInputException("name", "Enter a name."),
         // Minimal APIs in Development: a body that cannot be read (for example a bad enum value).
         "/bad-request" => new BadHttpRequestException("Failed to read parameter \"UpdateRequest request\" from the request body as JSON."),

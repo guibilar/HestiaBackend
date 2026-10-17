@@ -4,6 +4,7 @@ using Hestia.Modules.Inbox.Domain;
 using Hestia.Modules.Inbox.Infrastructure;
 using Hestia.Platform.Exceptions;
 using Hestia.Platform.Http;
+using Hestia.Platform.Text;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -89,6 +90,12 @@ public sealed class InboxMailReader(
                         // For example a .docx or a calendar invitation: the note says so.
                         refused.Add($"{attachment.FileName} ({exception.Message})");
                     }
+                    catch
+                    {
+                        // No note: the documents of the email go too, or the next read adds them again.
+                        await RemoveDocumentsAsync(ids);
+                        throw;
+                    }
                 }
 
                 var now = time.GetUtcNow();
@@ -103,10 +110,34 @@ public sealed class InboxMailReader(
                     MessageId = messageId,
                     DocumentIds = DocumentIdList.Write(ids)
                 });
-                await db.SaveChangesAsync(cancellationToken);
+                try
+                {
+                    await db.SaveChangesAsync(cancellationToken);
+                }
+                catch
+                {
+                    await RemoveDocumentsAsync(ids);
+                    throw;
+                }
                 notes++;
                 documentCount += ids.Count;
                 done.Add(mail.Uid);
+            }
+        }
+    }
+
+    /// <summary>Removes the documents of an email whose note is not saved (a failure is only logged).</summary>
+    private async Task RemoveDocumentsAsync(IEnumerable<Guid> ids)
+    {
+        foreach (var id in ids)
+        {
+            try
+            {
+                await documents.RemoveAsync(id, CancellationToken.None);
+            }
+            catch (Exception exception)
+            {
+                logger.LogWarning(exception, "Inbox: could not remove the document {DocumentId} of an email that failed", id);
             }
         }
     }
@@ -137,9 +168,9 @@ public sealed class InboxMailReader(
             parts.Add("Not added to Documents: " + string.Join("; ", refused));
         }
         var text = string.Join("\n\n", parts);
-        return text.Length <= InboxLimits.MaxTextLength ? text : text[..(InboxLimits.MaxTextLength - 1)] + "…";
+        return text.Length <= InboxLimits.MaxTextLength ? text : TextCut.Start(text, InboxLimits.MaxTextLength - 1) + "…";
     }
 
     private static string? Cut(string? text, int max) =>
-        string.IsNullOrWhiteSpace(text) ? null : text.Trim() is var trimmed && trimmed.Length > max ? trimmed[..max] : trimmed;
+        string.IsNullOrWhiteSpace(text) ? null : TextCut.Start(text.Trim(), max);
 }
