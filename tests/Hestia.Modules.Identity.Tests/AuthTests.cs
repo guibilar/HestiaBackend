@@ -1,14 +1,19 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Security.Claims;
 using System.Text.Json;
+using Hestia.Modules.Identity.Application;
 using Hestia.Modules.Identity.Contracts;
+using Hestia.Modules.Identity.Infrastructure;
 using Hestia.Testing;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.Routing.Patterns;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using static Hestia.Modules.Identity.Tests.SignInHost;
 
@@ -391,6 +396,86 @@ public class AuthTests
         Assert.Equal(HttpStatusCode.Unauthorized, await WhoAmIAsync(factory, phone));
         Assert.Equal(HttpStatusCode.OK, (await laptop.GetAsync("/api/Auth/me")).StatusCode);
     }
+
+    [Fact]
+    public async Task Login_WithTheCookieOfAnotherSession_StartsANewSession_AndEndsThatOne()
+    {
+        // Session fixation: the cookie handler renewed the session of the request, so the new sign-in kept its key and a
+        // copy of the earlier cookie was then signed in as the new user.
+        await using var factory = await WithAccountAsync();
+        await factory.WithScopeAsync(async provider =>
+        {
+            var users = provider.GetRequiredService<UserManager<IdentityUser>>();
+            Assert.True((await users.CreateAsync(new IdentityUser("sam"), "another long passphrase")).Succeeded);
+            return 0;
+        });
+        var alex = await SignInElsewhereAsync(factory);
+        var alexSession = Assert.Single(await SessionsAsync(factory));
+
+        var client = factory.CreateClient(new Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactoryClientOptions { HandleCookies = false });
+        var login = new HttpRequestMessage(HttpMethod.Post, "/api/Auth/login")
+        {
+            Content = JsonContent.Create(new { username = "sam", password = "another long passphrase" })
+        };
+        login.Headers.Add("Cookie", alex);
+        var signedIn = await client.SendAsync(login);
+        Assert.Equal(HttpStatusCode.OK, signedIn.StatusCode);
+        var sam = signedIn.Headers.GetValues("Set-Cookie").Single(c => c.StartsWith("finance_session=")).Split(';')[0];
+
+        // A new session (a new key in the cookie), and the session of alex ended: its cookie signs nobody in.
+        var samSession = Assert.Single(await SessionsAsync(factory));
+        Assert.NotEqual(alexSession.Id, samSession.Id);
+        var samId = await factory.WithScopeAsync(async provider =>
+            (await provider.GetRequiredService<UserManager<IdentityUser>>().FindByNameAsync("sam"))!.Id);
+        Assert.Equal(samId, samSession.UserId);
+        Assert.Equal(HttpStatusCode.Unauthorized, await WhoAmIAsync(factory, alex));
+        var me = new HttpRequestMessage(HttpMethod.Get, "/api/Auth/me");
+        me.Headers.Add("Cookie", sam);
+        Assert.Equal("sam", (await (await client.SendAsync(me)).ReadAsync<CurrentUserDto>()).Username);
+    }
+
+    [Fact]
+    public async Task Login_Again_WithTheSameAccount_ReplacesTheSession_AndAFailedLoginKeepsIt()
+    {
+        await using var factory = await WithAccountAsync();
+        var first = await SignInElsewhereAsync(factory);
+        var firstSession = Assert.Single(await SessionsAsync(factory));
+        var client = factory.CreateClient(new Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactoryClientOptions { HandleCookies = false });
+
+        var wrong = new HttpRequestMessage(HttpMethod.Post, "/api/Auth/login") { Content = JsonContent.Create(new { username = Username, password = "wrong" }) };
+        wrong.Headers.Add("Cookie", first);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.SendAsync(wrong)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, await WhoAmIAsync(factory, first));
+
+        var again = new HttpRequestMessage(HttpMethod.Post, "/api/Auth/login") { Content = JsonContent.Create(new { username = Username, password = Password }) };
+        again.Headers.Add("Cookie", first);
+        var signedIn = await client.SendAsync(again);
+        var second = signedIn.Headers.GetValues("Set-Cookie").Single(c => c.StartsWith("finance_session=")).Split(';')[0];
+
+        Assert.NotEqual(firstSession.Id, Assert.Single(await SessionsAsync(factory)).Id);
+        Assert.Equal(HttpStatusCode.Unauthorized, await WhoAmIAsync(factory, first));
+        Assert.Equal(HttpStatusCode.OK, await WhoAmIAsync(factory, second));
+    }
+
+    [Fact]
+    public async Task ASession_NeverChangesHands_ARenewalForAnotherUserEndsIt()
+    {
+        await using var factory = await WithAccountAsync();
+        var cookie = await SignInElsewhereAsync(factory);
+        var session = Assert.Single(await SessionsAsync(factory));
+        var someoneElse = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "someone-else")], "test"));
+
+        await factory.Services.GetRequiredService<DbTicketStore>().RenewAsync(
+            session.Id, new AuthenticationTicket(someoneElse, IdentityConstants.ApplicationScheme));
+
+        Assert.Empty(await SessionsAsync(factory));
+        Assert.Equal(HttpStatusCode.Unauthorized, await WhoAmIAsync(factory, cookie));
+    }
+
+    private static Task<List<(string Id, string UserId)>> SessionsAsync(HestiaApiFactory factory) =>
+        factory.WithScopeAsync(async provider =>
+            (await provider.GetRequiredService<IdentityDbContext>().UserSessions.ToListAsync())
+                .Select(session => (session.Id, session.UserId)).ToList());
 
     // ---- The account from the settings
 
