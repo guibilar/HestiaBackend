@@ -252,6 +252,30 @@ public class HardeningTests
         }
     }
 
+    [Fact]
+    public async Task UploadsOfTheSameContentAtTheSameTime_OnlyOneWritesTheFile()
+    {
+        // Two that wrote it would both remove it after a failed upload, while the other one still uses it.
+        var root = Directory.CreateTempSubdirectory("hestia-documents-race-").FullName;
+        try
+        {
+            var storage = Storage(root);
+            for (var round = 0; round < 50; round++)
+            {
+                var content = SampleFile.Png.Bytes.Append((byte)round).ToArray();
+                var stored = await Task.WhenAll(Enumerable.Range(0, 16).Select(_ => Task.Run(() =>
+                    storage.StoreAsync(new MemoryStream(content), long.MaxValue, CancellationToken.None))));
+
+                Assert.Single(stored, file => file.Created);
+                Assert.True(File.Exists(storage.PathOf(stored[0].Key)));
+            }
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private sealed record ArrangedFiles(Guid DocumentId, string Used, string OldUnused, string NewUnused, string OldTemp,
         string NewTemp, string Other)
     {

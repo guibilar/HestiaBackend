@@ -31,6 +31,8 @@ public sealed partial class DocumentStorage(IOptions<DocumentsOptions> options)
 
     private const int BufferSize = 81920;
 
+    private static readonly Lock MoveLock = new();
+
     [GeneratedRegex("^[0-9a-f]{2}/[0-9a-f]{64}$", RegexOptions.CultureInvariant)]
     private static partial Regex KeyFormat();
 
@@ -79,15 +81,21 @@ public sealed partial class DocumentStorage(IOptions<DocumentsOptions> options)
             var key = $"{sha256[..2]}/{sha256}";
             var path = PathOf(key);
             var created = false;
-            if (!File.Exists(path))
+            // One check and move at a time: of two uploads of the same content at the same time, only one writes the file,
+            // so only that one removes it when its upload fails. (File.Move without overwrite is not atomic on every file
+            // system; the documents volume has one host.)
+            lock (MoveLock)
             {
-                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-                File.Move(temp, path, overwrite: true);
-                created = true;
-            }
-            else
-            {
-                Touch(path);
+                if (!File.Exists(path))
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                    File.Move(temp, path, overwrite: true);
+                    created = true;
+                }
+                else
+                {
+                    Touch(path);
+                }
             }
             return new StoredFile(key, sha256, size, FileTypes.Detect(header.AsSpan(0, headerLength)), created);
         }
