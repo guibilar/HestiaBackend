@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Hestia.Modules.Tasks.Application;
 using Hestia.Modules.Tasks.Contracts;
 using Hestia.Modules.Tasks.Infrastructure;
 using Hestia.Testing;
@@ -319,5 +320,24 @@ public class TaskApiTests
 
         Assert.Equal(new[] { "EventInbox", "EventOutbox", "TaskCompletions", "TaskLinks", "Tasks", "__EFMigrationsHistory" },
             tables.Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public async Task TwoDoneAtTheSameTime_OnARepeatedTask_CountOnce()
+    {
+        Assert.SkipUnless(TestDatabase.OnPostgres, $"Needs PostgreSQL: set {TestDatabase.Variable}.");
+        await using var host = TasksHost.Start();
+        var task = await host.CreateAsync("Water the plants", Today, TasksHost.Every(1, RepeatUnit.Weeks));
+        await using var scope = host.Factory.Services.CreateAsyncScope();
+        // The second "done" read the task before the first one saved: it added a second completion and moved the due date
+        // from the old one.
+        await scope.ServiceProvider.GetRequiredService<TasksDbContext>().Tasks.SingleAsync(t => t.Id == task.Id);
+        await host.DoneAsync(task.Id);
+
+        await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() =>
+            scope.ServiceProvider.GetRequiredService<TaskService>().DoneAsync(task.Id, CancellationToken.None));
+
+        Assert.Equal(Today.AddDays(7), (await host.GetAsync(task.Id)).DueOn);
+        Assert.Equal(1, await host.WithDbAsync(db => db.Completions.CountAsync(c => c.TaskId == task.Id)));
     }
 }

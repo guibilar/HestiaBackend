@@ -32,6 +32,8 @@ public class TasksDbContext(DbContextOptions<TasksDbContext> options) : ModuleDb
             task.Property(t => t.RepeatUnit).HasConversion<string>().HasMaxLength(EnumLength);
             task.Property(t => t.RepeatMode).HasConversion<string>().HasMaxLength(EnumLength);
             task.Ignore(t => t.Repeat);
+            // PostgreSQL's row version (xmin, no column of its own): two "done" at the same time do not both count.
+            task.Property<uint>("xmin").IsRowVersion();
             // The lists by status and due date: today, overdue, upcoming (the summary, the alerts, the Today tile).
             task.HasIndex(t => new { t.Status, t.DueOn });
 
