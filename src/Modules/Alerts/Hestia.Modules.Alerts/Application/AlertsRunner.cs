@@ -3,6 +3,7 @@ using Hestia.Modules.Alerts.Contracts;
 using Hestia.Modules.Alerts.Domain;
 using Hestia.Modules.Alerts.Infrastructure;
 using Hestia.Platform.Finance;
+using Hestia.Platform.Text;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -322,7 +323,7 @@ public sealed class AlertsRunner(
             }
 
             var values = AlertValuesJson.Write(candidate.Values);
-            var sortKey = candidate.SortKey.Length > Alert.MaxSortKeyLength ? candidate.SortKey[..Alert.MaxSortKeyLength] : candidate.SortKey;
+            var sortKey = TextCut.Start(candidate.SortKey, Alert.MaxSortKeyLength);
             if (byKey.TryGetValue(candidate.Key, out var existing))
             {
                 if (existing.Kind != candidate.Kind || existing.Title != candidate.Title || existing.Text != candidate.Text ||

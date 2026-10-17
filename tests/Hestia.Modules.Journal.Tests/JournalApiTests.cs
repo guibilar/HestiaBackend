@@ -113,6 +113,14 @@ public class JournalApiTests
     }
 
     [Fact]
+    public void TheExcerpt_DoesNotSplitAnEmoji()
+    {
+        // The cut falls between the two halves of the emoji: it goes whole.
+        var excerpt = JournalService.Excerpt(new string('x', JournalLimits.ExcerptLength - 2) + "🙂 and more");
+        Assert.Equal(new string('x', JournalLimits.ExcerptLength - 2) + "…", excerpt);
+    }
+
+    [Fact]
     public void Streak_AndSameDays_FollowTheCalendar()
     {
         var days = new HashSet<DateOnly> { new(2026, 3, 1), new(2026, 2, 28), new(2026, 2, 27) };

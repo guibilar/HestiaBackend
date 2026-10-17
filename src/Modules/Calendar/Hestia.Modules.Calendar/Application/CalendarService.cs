@@ -124,14 +124,27 @@ public sealed class CalendarService(CalendarDbContext db, CalendarDays days)
         byKey.TryGetValue(key, out var current);
         if (item.Cancelled)
         {
+            // A cancelled occurrence (RECURRENCE-ID): the repeated event skips its day, with or without a changed copy here.
+            var skips = SkipInRepeat(item, byKey, now, dryRun, out var repeated);
             if (current is null)
             {
-                return Result(CalendarImportAction.Skip, null, "The file cancels this event, and Hestia does not have it.");
+                return repeated is not null
+                    ? Result(skips ? CalendarImportAction.Update : CalendarImportAction.Same, repeated.Id)
+                    : Result(CalendarImportAction.Skip, null, "The file cancels this event, and Hestia does not have it.");
             }
             if (!dryRun)
             {
                 db.Events.Remove(current);
                 byKey.Remove(key);
+                // A cancelled repeated event: its changed occurrences go with it.
+                if (item.RecurrenceId is null)
+                {
+                    foreach (var (otherKey, occurrence) in byKey.Where(pair => pair.Value.Uid == item.Uid).ToList())
+                    {
+                        db.Events.Remove(occurrence);
+                        byKey.Remove(otherKey);
+                    }
+                }
             }
             return Result(CalendarImportAction.Delete, current.Id);
         }
@@ -141,15 +154,7 @@ public sealed class CalendarService(CalendarDbContext db, CalendarDays days)
         }
 
         // A changed occurrence: the repeated event of the same UID skips its day.
-        if (item.RecurrenceDay is { } day && byKey.TryGetValue(Key(item.Uid, null), out var master) && master.Repeat is not null)
-        {
-            var skipped = SkippedDates.Write(SkippedDates.Read(master.SkippedDates).Append(day));
-            if (!dryRun && skipped != master.SkippedDates)
-            {
-                master.SkippedDates = skipped;
-                master.UpdatedAt = now;
-            }
-        }
+        SkipInRepeat(item, byKey, now, dryRun, out _);
 
         var target = current ?? new CalendarEvent
         {
@@ -178,6 +183,32 @@ public sealed class CalendarService(CalendarDbContext db, CalendarDays days)
             }
         }
         return Result(current is null ? CalendarImportAction.Add : CalendarImportAction.Update, current?.Id);
+    }
+
+    /// <summary>
+    /// An occurrence (RECURRENCE-ID) of a repeated event that Hestia has: the repeated event skips its day. True when the
+    /// day was not skipped yet.
+    /// </summary>
+    private static bool SkipInRepeat(IcsEvent item, Dictionary<string, CalendarEvent> byKey, DateTimeOffset now, bool dryRun,
+        out CalendarEvent? repeated)
+    {
+        repeated = null;
+        if (item.RecurrenceDay is not { } day || !byKey.TryGetValue(Key(item.Uid, null), out var master) || master.Repeat is null)
+        {
+            return false;
+        }
+        repeated = master;
+        var skipped = SkippedDates.Write(SkippedDates.Read(master.SkippedDates).Append(day));
+        if (skipped == master.SkippedDates)
+        {
+            return false;
+        }
+        if (!dryRun)
+        {
+            master.SkippedDates = skipped;
+            master.UpdatedAt = now;
+        }
+        return true;
     }
 
     private static string Key(string uid, string? recurrenceId) => $"{uid}\n{recurrenceId}";

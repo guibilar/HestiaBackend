@@ -3,6 +3,7 @@ using Hestia.Modules.Journal.Domain;
 using Hestia.Modules.Journal.Infrastructure;
 using Hestia.Platform.Exceptions;
 using Hestia.Platform.Paging;
+using Hestia.Platform.Text;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
@@ -237,6 +238,6 @@ public sealed class JournalService(JournalDbContext db, JournalDays days)
     public static string Excerpt(string text)
     {
         var line = string.Join(' ', text.Split((char[])['\n', '\r', '\t', ' '], StringSplitOptions.RemoveEmptyEntries));
-        return line.Length <= JournalLimits.ExcerptLength ? line : line[..(JournalLimits.ExcerptLength - 1)].TrimEnd() + "…";
+        return line.Length <= JournalLimits.ExcerptLength ? line : TextCut.Start(line, JournalLimits.ExcerptLength - 1).TrimEnd() + "…";
     }
 }

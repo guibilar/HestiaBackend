@@ -1,6 +1,7 @@
 using Hestia.Modules.Documents.Contracts;
 using Hestia.Modules.Documents.Domain;
 using Hestia.Modules.Documents.Infrastructure;
+using Hestia.Platform.Text;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -127,10 +128,10 @@ public sealed class DocumentOcr(
         }
 
         var text = string.Join("\n\n", texts);
-        document.OcrText = text.Length == 0 ? null : text.Length > Document.MaxOcrTextLength ? text[..Document.MaxOcrTextLength] : text;
+        document.OcrText = text.Length == 0 ? null : TextCut.Start(text, Document.MaxOcrTextLength);
         document.OcrStatus = errors.Count == 0 ? OcrStatus.Done : OcrStatus.Failed;
         var error = string.Join("\n", errors);
-        document.OcrError = errors.Count == 0 ? null : error.Length > Document.MaxOcrErrorLength ? error[..Document.MaxOcrErrorLength] : error;
+        document.OcrError = errors.Count == 0 ? null : TextCut.Start(error, Document.MaxOcrErrorLength);
         db.RaiseEvent(new DocumentChanged(document.Id, DocumentChange.OcrText, document.Title, document.Kind,
             DocumentTags.Read(document.Tags), document.IssuedOn, document.ExpiresOn, document.OcrStatus, time.GetUtcNow()));
         try

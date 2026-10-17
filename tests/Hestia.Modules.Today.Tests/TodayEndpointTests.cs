@@ -338,6 +338,36 @@ public sealed class TodayEndpointTests
             (FinanceData.UserRequests(finance).Count, FinanceData.SystemRequests(finance).Count));
     }
 
+    /// <summary>Alerts that fail at first, then answer with none.</summary>
+    private sealed class FlakyAlerts : IAlertQueries
+    {
+        public int Calls;
+
+        public Task<AlertList> GetOpenAsync(AlertListOptions options, CancellationToken cancellationToken = default) =>
+            Interlocked.Increment(ref Calls) == 1
+                ? throw new InvalidOperationException("Broken on purpose.")
+                : Task.FromResult(new AlertList(null, [], []));
+    }
+
+    [Fact]
+    public async Task AnAnswerWithoutTheAlerts_IsNotKept()
+    {
+        var data = new FinanceData();
+        await using var finance = await FakeFinance.StartAsync(data.RespondAsync);
+        var alerts = new FlakyAlerts();
+        await using var factory = Host(finance, FinanceData.Now, services: services =>
+        {
+            services.RemoveAll<IAlertQueries>();
+            services.AddSingleton<IAlertQueries>(alerts);
+        });
+        var client = factory.CreateClient();
+
+        await GetTodayAsync(client);
+        await GetTodayAsync(client);
+
+        Assert.Equal(2, alerts.Calls);
+    }
+
     [Fact]
     public async Task TheDay_IsTheDayInTheTimeZoneOfTheHost()
     {
