@@ -58,6 +58,15 @@ public class ImportTests
         Assert.Equal(("403-555-0123", new BirthdayDto(12, 31, 1985)), (contacts[2].Phone, contacts[2].Birthday));
     }
 
+    [Fact]
+    public void QuotedPrintable_InAnotherCharset_KeepsTheCharactersThatAreNotEncoded()
+    {
+        // "=E9" is é in ISO-8859-1; the ñ is in the file as text, not as bytes of the charset.
+        const string card = "BEGIN:VCARD\r\nVERSION:2.1\r\nFN;CHARSET=ISO-8859-1;ENCODING=QUOTED-PRINTABLE:Jos=E9 Muñoz\r\nEND:VCARD\r\n";
+
+        Assert.Equal("José Muñoz", Assert.Single(VCardReader.Read(card)).Person.Name);
+    }
+
     [Theory]
     [InlineData("1990-10-20", 10, 20, 1990)]
     [InlineData("19901020", 10, 20, 1990)]
