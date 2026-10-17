@@ -153,6 +153,9 @@ public class JournalApiTests
         Assert.Equal([Today.AddDays(-1), Today.AddDays(-3)], marco.Items.Select(e => e.Day).Order().Reverse());
 
         Assert.Equal(HttpStatusCode.BadRequest, (await host.Client.GetAsync($"{JournalHost.Journal}/entries?pageSize=0")).StatusCode);
+        // A page so far that the rows before it do not fit an int (it was the first page here, a 500 on PostgreSQL).
+        Assert.Equal(HttpStatusCode.BadRequest,
+            (await host.Client.GetAsync($"{JournalHost.Journal}/entries?page=2147483647&pageSize=100")).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest,
             (await host.Client.GetAsync($"{JournalHost.Journal}/entries?from=2026-10-10&to=2026-10-01")).StatusCode);
     }

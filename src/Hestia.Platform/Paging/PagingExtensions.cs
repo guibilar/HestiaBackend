@@ -27,5 +27,11 @@ public static class PagingExtensions
         {
             throw new InvalidInputException("pageSize", $"The page size must be from 1 to {MaxPageSize}.");
         }
+        // The rows before the page, (page - 1) * pageSize, must fit an int: a larger page overflowed to a negative skip
+        // (the first page in memory, a 500 from PostgreSQL).
+        if (page - 1 > int.MaxValue / pageSize)
+        {
+            throw new InvalidInputException("page", $"The page number must be at most {int.MaxValue / pageSize + 1} for a page size of {pageSize}.");
+        }
     }
 }
