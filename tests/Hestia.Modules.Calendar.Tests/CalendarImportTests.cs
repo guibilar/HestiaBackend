@@ -110,6 +110,24 @@ public class CalendarImportTests
     }
 
     [Fact]
+    public async Task ACancelledOccurrence_IsSkippedByTheRepeat()
+    {
+        await using var host = CalendarHost.Start();
+        await host.ImportAsync(Ics(Yoga));
+        // Outlook and Google send this when the organizer deletes one occurrence: Hestia has no copy of it.
+        var cancelled = Event("yoga@example.com",
+            "RECURRENCE-ID;TZID=America/Denver:20261103T180000\r\nSTATUS:CANCELLED\r\nSUMMARY:Yoga\r\n" +
+            "DTSTART;TZID=America/Denver:20261103T180000\r\nDTEND;TZID=America/Denver:20261103T190000\r\n");
+
+        var result = await host.ImportAsync(Ics(cancelled));
+        Assert.Equal(CalendarImportAction.Update, Assert.Single(result.Events).Action);
+
+        var items = (await host.ViewAsync(CalendarHost.Today, CalendarHost.Today.AddDays(30))).Items.Where(i => i.Title == "Yoga");
+        Assert.Equal([new DateTimeOffset(2026, 10, 21, 0, 0, 0, TimeSpan.Zero)], items.Select(i => i.StartsAt!.Value));
+        Assert.Equal(CalendarImportAction.Same, Assert.Single((await host.ImportAsync(Ics(cancelled))).Events).Action);
+    }
+
+    [Fact]
     public async Task ARepeatFasterThanDaily_IsSkipped_WithAReason_AndABadFileIsRefused()
     {
         await using var host = CalendarHost.Start();
