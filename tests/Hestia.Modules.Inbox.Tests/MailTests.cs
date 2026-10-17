@@ -41,7 +41,14 @@ public sealed class MailTests : IDisposable
         }
     }
 
-    private HestiaApiFactory Host(FakeMailbox mailbox) => new(
+    /// <summary>Documents that fail as a full disk would.</summary>
+    private sealed class FailingIntake : IDocumentIntake
+    {
+        public Task<DocumentDto> AddAsync(DocumentIntake intake, CancellationToken cancellationToken = default) =>
+            throw new IOException("No space left on device.");
+    }
+
+    private HestiaApiFactory Host(FakeMailbox mailbox, Action<IServiceCollection>? services = null) => new(
         new Dictionary<string, string?>
         {
             ["Documents:StoragePath"] = _storage,
@@ -49,10 +56,11 @@ public sealed class MailTests : IDisposable
             // The worker stays off; the tests run the reader themselves.
             ["Inbox:Mail:AllowedSenders"] = "me@example.com, @hydro.example"
         },
-        services =>
+        collection =>
         {
-            services.RemoveAll<IInboxMailbox>();
-            services.AddSingleton<IInboxMailbox>(mailbox);
+            collection.RemoveAll<IInboxMailbox>();
+            collection.AddSingleton<IInboxMailbox>(mailbox);
+            services?.Invoke(collection);
         });
 
     private static Task<InboxMailResult> ReadAsync(HestiaApiFactory factory) =>
@@ -99,6 +107,57 @@ public sealed class MailTests : IDisposable
 
         Assert.Equal(1, again.Duplicates);
         Assert.Single((await (await factory.CreateClient().GetAsync("/api/inbox")).ReadAsync<PaginatedList<InboxItemDto>>()).Items);
+    }
+
+    [Fact]
+    public async Task AnEmailThatFails_StillMarksTheEmailsBeforeItDone()
+    {
+        var mailbox = new FakeMailbox();
+        // No Message-ID: only the done mark keeps it from becoming a note again.
+        mailbox.New.Add(new InboxMail("1", null, "me@example.com", "me@example.com", "Idea", null, []));
+        mailbox.New.Add(new InboxMail("2", "<b@example.com>", "me@example.com", "me@example.com", "Bill", null,
+            [new InboxMailAttachment("bill.png", Png)]));
+        await using var factory = Host(mailbox, services =>
+        {
+            services.RemoveAll<IDocumentIntake>();
+            services.AddScoped<IDocumentIntake, FailingIntake>();
+        });
+
+        await Assert.ThrowsAsync<IOException>(() => ReadAsync(factory));
+        await Assert.ThrowsAsync<IOException>(() => ReadAsync(factory));
+
+        Assert.Equal(["1"], mailbox.Done);
+        var note = Assert.Single((await (await factory.CreateClient().GetAsync("/api/inbox")).ReadAsync<PaginatedList<InboxItemDto>>()).Items);
+        Assert.Equal("Idea", note.Text);
+    }
+
+    [Fact]
+    public async Task AnEmailWithNulCharacters_BecomesANoteWithoutThem()
+    {
+        // PostgreSQL refuses NUL in text: the save failed, and the email failed again at each read.
+        var mailbox = new FakeMailbox();
+        mailbox.New.Add(new InboxMail("1", "<n@example.com>\0", "me@example.com", "Me\0 <me@example.com>", "Ide\0a", "Line\0 one", []));
+        await using var factory = Host(mailbox);
+
+        var result = await ReadAsync(factory);
+
+        Assert.Equal(1, result.Notes);
+        var note = Assert.Single((await (await factory.CreateClient().GetAsync("/api/inbox")).ReadAsync<PaginatedList<InboxItemDto>>()).Items);
+        Assert.Equal(("Idea\n\nLine one", "Me <me@example.com>"), (note.Text, note.From));
+    }
+
+    [Fact]
+    public async Task ASenderWithSpacesPastTheLimit_IsTrimmed_NotCut()
+    {
+        // Longer than the limit only with its spaces: the cut after the trim went past the end.
+        var mailbox = new FakeMailbox();
+        mailbox.New.Add(new InboxMail("1", null, "me@example.com", "Me <me@example.com>" + new string(' ', InboxLimits.MaxFromLength),
+            "Idea", null, []));
+        await using var factory = Host(mailbox);
+
+        Assert.Equal(1, (await ReadAsync(factory)).Notes);
+        var note = Assert.Single((await (await factory.CreateClient().GetAsync("/api/inbox")).ReadAsync<PaginatedList<InboxItemDto>>()).Items);
+        Assert.Equal("Me <me@example.com>", note.From);
     }
 
     [Fact]
