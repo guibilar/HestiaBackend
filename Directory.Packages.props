@@ -46,10 +46,10 @@
 
   <!-- Events (D7, T04). Wolverine is MIT-licensed. -->
   <ItemGroup Label="Events">
-    <PackageVersion Include="WolverineFx" Version="6.49.0" />
-    <PackageVersion Include="WolverineFx.RabbitMQ" Version="6.49.0" />
+    <PackageVersion Include="WolverineFx" Version="6.51.0" />
+    <PackageVersion Include="WolverineFx.RabbitMQ" Version="6.51.0" />
     <!-- Compiles the handler code when the host starts (Wolverine 6 no longer has the compiler in WolverineFx). -->
-    <PackageVersion Include="WolverineFx.RuntimeCompilation" Version="6.49.0" />
+    <PackageVersion Include="WolverineFx.RuntimeCompilation" Version="6.51.0" />
   </ItemGroup>
 
   <ItemGroup Label="Tests">
